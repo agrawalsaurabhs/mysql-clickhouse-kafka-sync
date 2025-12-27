@@ -1,0 +1,80 @@
+{
+    "clickhouse": {
+        "host": "127.0.0.1",
+        "port": 9000,
+        "database": "default",
+        "username": "default",
+        "password": "",
+        "secure": false,
+        "protocol": "native",
+        "maxOpenConns": 20,
+        "asyncInsert": true
+    },
+    "kafka": {
+        "brokers": ["localhost:9092"],
+        "security": {
+            "security.protocol": "PLAINTEXT"
+        },
+        "properties": {
+            "heartbeat.interval.ms": 10000,
+            "session.timeout.ms": 60000,
+            "rebalance.timeout.ms": 180000,
+            "max.poll.interval.ms": 300000
+        }
+    },
+    "tasks": [
+        {
+            "name": "sinker-customers",
+            "topic": "mysql.inventory.customers",
+            "consumerGroup": "sinker-customers-v2",
+            "earliest": true,
+            "parser": "json",
+            "autoSchema": false,
+            "tableName": "customers",
+            "dims": [
+                {
+                    "name": "_raw_message",
+                    "type": "String"
+                }
+            ],
+            "bufferSize": 1000,
+            "flushInterval": 5
+        },
+        {
+            "name": "sinker-products",
+            "topic": "mysql.inventory.products",
+            "consumerGroup": "sinker-products", 
+            "earliest": true,
+            "parser": "json",
+            "autoSchema": false,
+            "tableName": "products",
+            "dims": [
+                {
+                    "name": "_raw_message",
+                    "type": "String"
+                }
+            ],
+            "bufferSize": 1000,
+            "flushInterval": 5
+        },
+        {
+            "name": "sinker-orders",
+            "topic": "mysql.inventory.orders",
+            "consumerGroup": "sinker-orders",
+            "earliest": true,
+            "parser": "json", 
+            "autoSchema": false,
+            "tableName": "orders",
+            "dims": [
+                {
+                    "name": "_raw_message",
+                    "type": "String"
+                }
+            ],
+            "bufferSize": 1000,
+            "flushInterval": 5
+        }
+    ],
+    "logLevel": "info",
+    "logTrace": false
+}
