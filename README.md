@@ -90,6 +90,7 @@ After setup is complete, start the complete pipeline:
 Or start components individually:
 
 **Start services:**
+
 ```bash
 ./scripts/mysql.sh start
 ./scripts/kafka.sh start
@@ -97,12 +98,14 @@ Or start components individually:
 ```
 
 **Configure CDC pipeline:**
+
 ```bash
 ./scripts/debezium.sh start
 ./scripts/debezium.sh create-connector
 ```
 
 **Start sink connector:**
+
 ```bash
 ./scripts/sink.sh start
 ```
@@ -129,12 +132,14 @@ Or start components individually:
 ## Management Commands
 
 ### Complete System Management
+
 ```bash
 ./scripts/setup-all.sh        # Install and configure all components
 ./scripts/health-check.sh      # Check health of all components
 ```
 
 ### MySQL Management
+
 ```bash
 ./scripts/mysql.sh setup      # Complete setup (install, configure, secure)
 ./scripts/mysql.sh start      # Start MySQL server
@@ -148,6 +153,7 @@ Or start components individually:
 ```
 
 ### Kafka Management
+
 ```bash
 ./scripts/kafka.sh setup      # Complete setup (install, configure)
 ./scripts/kafka.sh start      # Start Zookeeper and Kafka
@@ -159,6 +165,7 @@ Or start components individually:
 ```
 
 ### ClickHouse Management
+
 ```bash
 ./scripts/clickhouse.sh setup    # Complete setup (install, configure, initialize)
 ./scripts/clickhouse.sh start    # Start ClickHouse server
@@ -168,6 +175,7 @@ Or start components individually:
 ```
 
 ### Debezium Management
+
 ```bash
 ./scripts/debezium.sh setup             # Complete setup (install, configure)
 ./scripts/debezium.sh start             # Start Kafka Connect
@@ -178,6 +186,7 @@ Or start components individually:
 ```
 
 ### Sink Connector Management
+
 ```bash
 ./scripts/sink.sh setup           # Complete setup (install Go, build)
 ./scripts/sink.sh start           # Start sink connector
