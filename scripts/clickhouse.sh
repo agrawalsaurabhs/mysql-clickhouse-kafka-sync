@@ -5,6 +5,25 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Load environment variables
+if [ -f "$PROJECT_DIR/.env" ]; then
+    set -a  # automatically export all variables
+    source "$PROJECT_DIR/.env"
+    set +a  # stop automatically exporting
+fi
+
+# Configuration with environment variable fallbacks
+CLICKHOUSE_HOST="${CLICKHOUSE_HOST:-127.0.0.1}"
+CLICKHOUSE_PORT="${CLICKHOUSE_PORT:-9000}"
+CLICKHOUSE_HTTP_PORT="${CLICKHOUSE_HTTP_PORT:-8123}"
+CLICKHOUSE_USER="${CLICKHOUSE_USER:-default}"
+CLICKHOUSE_PASSWORD="${CLICKHOUSE_PASSWORD:-}"
+
+# Executable paths with fallbacks
+CLICKHOUSE_BIN="${CLICKHOUSE_BIN:-clickhouse}"
+HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-/opt/homebrew}"
+
 CLICKHOUSE_CONFIG="$PROJECT_DIR/clickhouse-config/config.xml"
 CLICKHOUSE_DATA="$PROJECT_DIR/clickhouse-data"
 PID_FILE="$CLICKHOUSE_DATA/clickhouse.pid"
@@ -66,7 +85,7 @@ function initialize_database() {
     fi
     
     # Create database and check if tables exist
-    /opt/homebrew/bin/clickhouse client --query "CREATE DATABASE IF NOT EXISTS mysql_sync"
+    $CLICKHOUSE_BIN client --query "CREATE DATABASE IF NOT EXISTS mysql_sync"
     
     local table_count=$(clickhouse client --query "SELECT count() FROM system.tables WHERE database = 'mysql_sync'" 2>/dev/null)
     
@@ -141,14 +160,14 @@ function diagnose_clickhouse() {
     echo "📋 Connection Test:"
     if clickhouse client --query "SELECT 1" > /dev/null 2>&1; then
         echo "   ✅ Can connect to ClickHouse"
-        echo "   📊 Version: $(/opt/homebrew/bin/clickhouse client --query "SELECT version()")"
+        echo "   📊 Version: $($CLICKHOUSE_BIN client --query "SELECT version()")"
     else
         echo "   ❌ Cannot connect to ClickHouse"
     fi
     
     echo ""
     echo "💡 Recommended Actions:"
-    if ! command -v /opt/homebrew/bin/clickhouse &> /dev/null; then
+    if ! command -v $CLICKHOUSE_BIN &> /dev/null; then
         echo "   → Run: $0 setup"
     elif ! [[ -f "$PID_FILE" ]] || ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
         echo "   → Run: $0 start"
@@ -164,7 +183,7 @@ function start_clickhouse() {
     fi
     
     echo "Starting ClickHouse server..."
-    /opt/homebrew/bin/clickhouse server --config-file="$CLICKHOUSE_CONFIG" --daemon --pid-file="$PID_FILE"
+    $CLICKHOUSE_BIN server --config-file="$CLICKHOUSE_CONFIG" --daemon --pid-file="$PID_FILE"
     sleep 2
     
     if clickhouse client --query "SELECT 1" > /dev/null 2>&1; then
@@ -202,7 +221,7 @@ function stop_clickhouse() {
 function status_clickhouse() {
     if [[ -f "$PID_FILE" ]] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
         echo "✅ ClickHouse is running (PID: $(cat "$PID_FILE"))"
-        /opt/homebrew/bin/clickhouse client --query "SELECT version()" | sed 's/^/   Version: /'
+        $CLICKHOUSE_BIN client --query "SELECT version()" | sed 's/^/   Version: /'
     else
         echo "❌ ClickHouse is not running"
         return 1

@@ -5,6 +5,23 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Load environment variables
+if [ -f "$PROJECT_DIR/.env" ]; then
+    set -a  # automatically export all variables
+    source "$PROJECT_DIR/.env"
+    set +a  # stop automatically exporting
+fi
+
+# Configuration with environment variable fallbacks
+KAFKA_HOST="${KAFKA_HOST:-localhost}"
+KAFKA_PORT="${KAFKA_PORT:-9092}"
+DEBEZIUM_REST_PORT="${DEBEZIUM_REST_PORT:-8083}"
+MYSQL_HOST="${MYSQL_HOST:-localhost}"
+MYSQL_PORT="${MYSQL_PORT:-3306}"
+MYSQL_USER="${MYSQL_USER:-debezium}"
+MYSQL_PASSWORD="${MYSQL_PASSWORD:-debezium_password}"
+
 KAFKA_VERSION="2.13-3.7.0"
 KAFKA_HOME="$PROJECT_DIR/kafka_$KAFKA_VERSION"
 CONNECT_CONFIG="$PROJECT_DIR/debezium/connect-distributed.properties"
@@ -223,6 +240,10 @@ function create_mysql_connector() {
     fi
     
     echo "🏗️  Creating MySQL inventory connector..."
+    
+    # Generate connector configuration with current environment variables
+    echo "📝 Generating connector configuration..."
+    "$SCRIPT_DIR/generate-connector-config.sh"
     
     # Check if connector already exists
     if curl -s http://localhost:8083/connectors/mysql-inventory-connector > /dev/null 2>&1; then

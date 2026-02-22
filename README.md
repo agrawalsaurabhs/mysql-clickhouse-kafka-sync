@@ -434,7 +434,7 @@ tail -f $KAFKA_HOME/logs/connect.log
 
 ### Log Locations
 
-- **MySQL**: `/usr/local/var/log/mysql/`
+- **MySQL**: `$MYSQL_LOG_DIR` (typically `/usr/local/var/log/mysql/` on macOS)
 - **Kafka**: `$KAFKA_HOME/logs/`
 - **ClickHouse**: `~/clickhouse-data/clickhouse.err.log`
 - **Sink Connector**: Console output or `sink.log`

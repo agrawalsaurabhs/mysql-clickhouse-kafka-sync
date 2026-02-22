@@ -5,6 +5,23 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Load environment variables
+if [ -f "$PROJECT_DIR/.env" ]; then
+    set -a  # automatically export all variables
+    source "$PROJECT_DIR/.env"
+    set +a  # stop automatically exporting
+fi
+
+# Configuration with environment variable fallbacks
+KAFKA_HOST="${KAFKA_HOST:-localhost}"
+KAFKA_PORT="${KAFKA_PORT:-9092}"
+ZOOKEEPER_HOST="${ZOOKEEPER_HOST:-localhost}"
+ZOOKEEPER_PORT="${ZOOKEEPER_PORT:-2181}"
+
+# Executable paths with fallbacks
+HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-$HOMEBREW_PREFIX}"
+
 KAFKA_VERSION="2.13-3.7.0"
 KAFKA_HOME="$PROJECT_DIR/kafka_$KAFKA_VERSION"
 KAFKA_CONFIG="$PROJECT_DIR/kafka-config/server.properties"
@@ -19,8 +36,8 @@ function check_dependencies() {
     if ! command -v java &> /dev/null; then
         echo "📦 Installing Java..."
         brew install openjdk@17
-        echo 'export PATH="/opt/homebrew/opt/openjdk@17/bin:$PATH"' >> ~/.zprofile
-        export PATH="/opt/homebrew/opt/openjdk@17/bin:$PATH"
+        echo 'export PATH="$HOMEBREW_PREFIX/opt/openjdk@17/bin:$PATH"' >> ~/.zprofile
+        export PATH="$HOMEBREW_PREFIX/opt/openjdk@17/bin:$PATH"
     fi
     
     echo "✅ Java is available: $(java -version 2>&1 | head -1)"

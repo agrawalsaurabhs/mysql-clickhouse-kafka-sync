@@ -5,6 +5,19 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
+# Load environment variables
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    set -a  # automatically export all variables
+    source "$PROJECT_ROOT/.env"
+    set +a  # stop automatically exporting
+fi
+
+# Configuration with environment variable fallbacks
+MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-password}"
+
+# Executable paths with fallbacks
+CLICKHOUSE_BIN="${CLICKHOUSE_BIN:-clickhouse}"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -151,10 +164,10 @@ clean_clickhouse_data() {
         log "Dropping all user databases..."
         
         # Get list of databases and drop non-system ones
-        /opt/homebrew/bin/clickhouse client --query "SHOW DATABASES" 2>/dev/null | while read db; do
+        $CLICKHOUSE_BIN client --query "SHOW DATABASES" 2>/dev/null | while read db; do
             if [ ! -z "$db" ] && [ "$db" != "system" ] && [ "$db" != "INFORMATION_SCHEMA" ] && [ "$db" != "information_schema" ]; then
                 log "Dropping database: $db"
-                /opt/homebrew/bin/clickhouse client --query "DROP DATABASE IF EXISTS $db" 2>/dev/null || warn "Could not drop database $db"
+                $CLICKHOUSE_BIN client --query "DROP DATABASE IF EXISTS $db" 2>/dev/null || warn "Could not drop database $db"
             fi
         done
     fi
@@ -201,7 +214,7 @@ clean_mysql_data() {
     
     # Drop and recreate inventory database completely
     log "Dropping and recreating inventory database..."
-    mysql -u root -ppassword -e "
+    mysql -u root -p${MYSQL_ROOT_PASSWORD} -e "
         -- Drop the entire inventory database
         DROP DATABASE IF EXISTS inventory;
         
@@ -214,10 +227,10 @@ clean_mysql_data() {
     " 2>/dev/null || warn "Could not drop/recreate MySQL database"
     
     # Also clean any other CDC-related databases
-    mysql -u root -ppassword -e "SHOW DATABASES;" 2>/dev/null | grep -E "(debezium|kafka|connect)" | while read db; do
+    mysql -u root -p${MYSQL_ROOT_PASSWORD} -e "SHOW DATABASES;" 2>/dev/null | grep -E "(debezium|kafka|connect)" | while read db; do
         if [ ! -z "$db" ]; then
             log "Dropping CDC database: $db"
-            mysql -u root -ppassword -e "DROP DATABASE IF EXISTS $db;" 2>/dev/null || true
+            mysql -u root -p${MYSQL_ROOT_PASSWORD} -e "DROP DATABASE IF EXISTS $db;" 2>/dev/null || true
         fi
     done
     

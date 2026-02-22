@@ -5,6 +5,20 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
+# Load environment variables
+if [ -f "$PROJECT_DIR/.env" ]; then
+    set -a  # automatically export all variables
+    source "$PROJECT_DIR/.env"
+    set +a  # stop automatically exporting
+fi
+
+# Configuration with environment variable fallbacks
+KAFKA_HOST="${KAFKA_HOST:-localhost}"
+KAFKA_PORT="${KAFKA_PORT:-9092}"
+DEBEZIUM_REST_PORT="${DEBEZIUM_REST_PORT:-8083}"
+CLICKHOUSE_HOST="${CLICKHOUSE_HOST:-127.0.0.1}"
+CLICKHOUSE_HTTP_PORT="${CLICKHOUSE_HTTP_PORT:-8123}"
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'

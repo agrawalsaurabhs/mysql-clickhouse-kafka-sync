@@ -2,6 +2,12 @@
 sink-connector/mysql-clickhouse-sink
 sink-connector/mysql-clickhouse-sink.exe
 
+# Environment variables with sensitive data
+.env
+.env.local
+.env.production
+.env.staging
+
 # Go build cache
 sink-connector/go.sum
 

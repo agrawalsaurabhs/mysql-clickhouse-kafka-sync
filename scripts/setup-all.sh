@@ -8,6 +8,17 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
+# Load environment variables
+if [ -f "$PROJECT_DIR/.env" ]; then
+    set -a  # automatically export all variables
+    source "$PROJECT_DIR/.env"
+    set +a  # stop automatically exporting
+fi
+
+# Executable paths with fallbacks
+HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-/opt/homebrew}"
+BREW_BIN="${BREW_BIN:-brew}"
+
 echo "🚀 CDC Pipeline - Complete Setup"
 echo "================================="
 echo ""
@@ -37,8 +48,8 @@ if ! command -v brew &> /dev/null; then
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
     
     # Add Homebrew to PATH for current session
-    echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
-    eval "$(/opt/homebrew/bin/brew shellenv)"
+    echo 'eval "$($HOMEBREW_PREFIX/bin/brew shellenv)"' >> ~/.zprofile
+    eval "$($HOMEBREW_PREFIX/bin/brew shellenv)"
 else
     echo "✅ Homebrew is available"
 fi
@@ -58,8 +69,8 @@ brew install wget curl git
 if ! command -v java &> /dev/null; then
     echo "📦 Installing OpenJDK..."
     brew install openjdk@17
-    echo 'export PATH="/opt/homebrew/opt/openjdk@17/bin:$PATH"' >> ~/.zprofile
-    export PATH="/opt/homebrew/opt/openjdk@17/bin:$PATH"
+    echo 'export PATH="$HOMEBREW_PREFIX/opt/openjdk@17/bin:$PATH"' >> ~/.zprofile
+    export PATH="$HOMEBREW_PREFIX/opt/openjdk@17/bin:$PATH"
 else
     echo "✅ Java is already installed"
     java -version

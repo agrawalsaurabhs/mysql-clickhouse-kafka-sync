@@ -1,10 +1,23 @@
 #!/bin/bash
 
-# Data Generator - Inserts records every 0.5 seconds
+# Data Generator - Inserts records every 5 seconds
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Load environment variables
+if [ -f "$PROJECT_DIR/.env" ]; then
+    set -a  # automatically export all variables
+    source "$PROJECT_DIR/.env"
+    set +a  # stop automatically exporting
+fi
+
+# Configuration with environment variable fallbacks
+MYSQL_HOST="${MYSQL_HOST:-localhost}"
+MYSQL_PORT="${MYSQL_PORT:-3306}"
+MYSQL_USER="${MYSQL_USER:-debezium}"
+MYSQL_PASSWORD="${MYSQL_PASSWORD:-debezium_password}"
 
 echo "🚀 Starting continuous data generation..."
 echo "📝 Performing random CRUD operations every 5 seconds"
@@ -17,6 +30,11 @@ echo ""
 
 # Counter for tracking insertions
 counter=0
+
+# MySQL connection helper
+mysql_exec() {
+    mysql -h "${MYSQL_HOST}" -P "${MYSQL_PORT}" -u "${MYSQL_USER}" -p"${MYSQL_PASSWORD}" "$@"
+}
 
 # Arrays for generating random data
 first_names=("Alice" "Bob" "Charlie" "David" "Eve" "Frank" "Grace" "Henry" "Ivy" "Jack" "Kate" "Liam" "Mia" "Noah" "Olivia" "Peter" "Quinn" "Ruby" "Sam" "Tina")
@@ -43,13 +61,13 @@ while true; do
     
     if [ $operation_type -lt 4 ]; then
         # CREATE (INSERT) - 40% probability
-        mysql -u debezium -pdebezium_password -e "
+        mysql_exec -e "
         USE inventory;
         INSERT INTO customers (first_name, last_name, email) 
         VALUES ('$first_name', '$last_name', '$email');
         " 2>/dev/null
         
-        mysql -u debezium -pdebezium_password -e "
+        mysql_exec -e "
         USE inventory;
         INSERT INTO products (name, description, weight) 
         VALUES ('$product_name', 'Auto-generated product #$counter', $weight);
@@ -62,7 +80,7 @@ while true; do
         update_type=$((RANDOM % 3))
         if [ $update_type -eq 0 ]; then
             # Update customer
-            mysql -u debezium -pdebezium_password -e "
+            mysql_exec -e "
             USE inventory;
             UPDATE customers SET email = CONCAT('updated_', email) 
             WHERE id = (SELECT id FROM (SELECT id FROM customers ORDER BY RAND() LIMIT 1) as tmp);
@@ -70,7 +88,7 @@ while true; do
             echo "[$timestamp] #$counter - UPDATE: Updated customer email"
         elif [ $update_type -eq 1 ]; then
             # Update product
-            mysql -u debezium -pdebezium_password -e "
+            mysql_exec -e "
             USE inventory;
             UPDATE products SET weight = ROUND(RAND() * 10, 2)
             WHERE id = (SELECT id FROM (SELECT id FROM products ORDER BY RAND() LIMIT 1) as tmp);
@@ -78,7 +96,7 @@ while true; do
             echo "[$timestamp] #$counter - UPDATE: Updated product weight"
         else
             # Update customer name
-            mysql -u debezium -pdebezium_password -e "
+            mysql_exec -e "
             USE inventory;
             UPDATE customers SET first_name = CONCAT(first_name, '-MOD') 
             WHERE id = (SELECT id FROM (SELECT id FROM customers ORDER BY RAND() LIMIT 1) as tmp);
@@ -91,7 +109,7 @@ while true; do
         delete_type=$((RANDOM % 2))
         if [ $delete_type -eq 0 ]; then
             # Delete customer (but keep some records)
-            deleted_count=$(mysql -u debezium -pdebezium_password -e "
+            deleted_count=$(mysql_exec -e "
             USE inventory;
             DELETE FROM customers WHERE id = (
                 SELECT id FROM (
@@ -107,7 +125,7 @@ while true; do
             fi
         else
             # Delete product
-            deleted_count=$(mysql -u debezium -pdebezium_password -e "
+            deleted_count=$(mysql_exec -e "
             USE inventory;
             DELETE FROM products WHERE id = (
                 SELECT id FROM (
@@ -127,19 +145,19 @@ while true; do
         # READ queries - 10% probability
         read_type=$((RANDOM % 3))
         if [ $read_type -eq 0 ]; then
-            customer_count=$(mysql -u debezium -pdebezium_password -e "
+            customer_count=$(mysql_exec -e "
             USE inventory;
             SELECT COUNT(*) as count FROM customers;
             " 2>/dev/null | tail -1)
             echo "[$timestamp] #$counter - READ: Total customers: $customer_count"
         elif [ $read_type -eq 1 ]; then
-            product_count=$(mysql -u debezium -pdebezium_password -e "
+            product_count=$(mysql_exec -e "
             USE inventory;
             SELECT COUNT(*) as count FROM products;
             " 2>/dev/null | tail -1)
             echo "[$timestamp] #$counter - READ: Total products: $product_count"
         else
-            latest_customer=$(mysql -u debezium -pdebezium_password -e "
+            latest_customer=$(mysql_exec -e "
             USE inventory;
             SELECT CONCAT(first_name, ' ', last_name) as name FROM customers ORDER BY id DESC LIMIT 1;
             " 2>/dev/null | tail -1)
