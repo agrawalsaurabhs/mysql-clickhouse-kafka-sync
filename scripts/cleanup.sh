@@ -17,6 +17,8 @@ MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-password}"
 
 # Executable paths with fallbacks
 CLICKHOUSE_BIN="${CLICKHOUSE_BIN:-clickhouse}"
+HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-/opt/homebrew}"
+KAFKA_LIBEXEC="$HOMEBREW_PREFIX/opt/kafka/libexec"
 
 # Colors for output
 RED='\033[0;31m'
@@ -113,15 +115,13 @@ clean_kafka_data() {
     if is_service_running "Kafka" "kafka.Kafka"; then
         log "Deleting all Kafka topics..."
         
-        # Get Kafka directory from the kafka.sh script
-        local kafka_dir="$PROJECT_ROOT/kafka_2.13-3.7.0"
-        
-        if [ -d "$kafka_dir" ]; then
+        # Use Homebrew Kafka installation
+        if [ -d "$KAFKA_LIBEXEC" ]; then
             # List and delete all topics (except internal ones)
-            "$kafka_dir/bin/kafka-topics.sh" --bootstrap-server localhost:9092 --list 2>/dev/null | grep -v "^__" | while read topic; do
+            "$KAFKA_LIBEXEC/bin/kafka-topics.sh" --bootstrap-server localhost:9092 --list 2>/dev/null | grep -v "^__" | while read topic; do
                 if [ ! -z "$topic" ]; then
                     log "Deleting topic: $topic"
-                    "$kafka_dir/bin/kafka-topics.sh" --bootstrap-server localhost:9092 --delete --topic "$topic" 2>/dev/null || true
+                    "$KAFKA_LIBEXEC/bin/kafka-topics.sh" --bootstrap-server localhost:9092 --delete --topic "$topic" 2>/dev/null || true
                 fi
             done
         fi

@@ -20,14 +20,15 @@ ZOOKEEPER_HOST="${ZOOKEEPER_HOST:-localhost}"
 ZOOKEEPER_PORT="${ZOOKEEPER_PORT:-2181}"
 
 # Executable paths with fallbacks
-HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-$HOMEBREW_PREFIX}"
+HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-/opt/homebrew}"
+BREW_BIN="${BREW_BIN:-brew}"
 
-KAFKA_VERSION="2.13-3.7.0"
-KAFKA_HOME="$PROJECT_DIR/kafka_$KAFKA_VERSION"
+# Kafka paths (Homebrew installation)
+KAFKA_HOME="$HOMEBREW_PREFIX/opt/kafka"
+KAFKA_LIBEXEC="$HOMEBREW_PREFIX/opt/kafka/libexec"
 KAFKA_CONFIG="$PROJECT_DIR/kafka-config/server.properties"
-ZK_CONFIG="$KAFKA_HOME/config/zookeeper.properties"
+ZK_CONFIG="$KAFKA_LIBEXEC/config/zookeeper.properties"
 KAFKA_DATA_DIR="$PROJECT_DIR/kafka-data"
-KAFKA_URL="https://archive.apache.org/dist/kafka/3.7.0/kafka_2.13-3.7.0.tgz"
 
 function check_dependencies() {
     echo "🔍 Checking Kafka dependencies..."
@@ -43,38 +44,23 @@ function check_dependencies() {
     echo "✅ Java is available: $(java -version 2>&1 | head -1)"
 }
 
-function download_kafka() {
-    echo "⬇️ Downloading Kafka $KAFKA_VERSION..."
-    
-    local temp_dir="/tmp/kafka_download"
-    mkdir -p "$temp_dir"
-    
-    if [ ! -f "$temp_dir/kafka.tgz" ]; then
-        echo "📥 Downloading from Apache mirror..."
-        curl -L "$KAFKA_URL" -o "$temp_dir/kafka.tgz"
-    fi
-    
-    echo "📦 Extracting Kafka..."
-    tar -xzf "$temp_dir/kafka.tgz" -C "$PROJECT_DIR"
-    
-    echo "✅ Kafka downloaded and extracted to $KAFKA_HOME"
-}
-
 function install_kafka() {
-    echo "📦 Installing Kafka..."
+    echo "📦 Installing Kafka via Homebrew..."
     
-    if [ -d "$KAFKA_HOME" ]; then
-        echo "✅ Kafka is already installed at $KAFKA_HOME"
+    # Check if Kafka is already installed
+    if $BREW_BIN list kafka &> /dev/null; then
+        echo "✅ Kafka is already installed via Homebrew"
+        echo "   Location: $KAFKA_HOME"
         return 0
     fi
     
-    check_dependencies
-    download_kafka
+    # Install Kafka using Homebrew
+    echo "📥 Installing Kafka and dependencies..."
+    $BREW_BIN install kafka
     
-    # Make scripts executable
-    chmod +x "$KAFKA_HOME/bin/"*.sh
-    
-    echo "✅ Kafka installation completed"
+    echo "✅ Kafka installation completed via Homebrew"
+    echo "   Kafka Home: $KAFKA_HOME"
+    echo "   Kafka Libexec: $KAFKA_LIBEXEC"
 }
 
 function setup_kafka_dirs() {
@@ -228,7 +214,7 @@ function start_kafka() {
         
         # Test broker connectivity
         sleep 2
-        if timeout 10 "$KAFKA_HOME/bin/kafka-broker-api-versions.sh" --bootstrap-server localhost:9092 > /dev/null 2>&1; then
+        if timeout 10 "$KAFKA_LIBEXEC/bin/kafka-broker-api-versions.sh" --bootstrap-server localhost:9092 > /dev/null 2>&1; then
             echo "✅ Kafka broker is accessible"
         else
             echo "⚠️  Kafka broker may not be fully ready yet"
@@ -279,7 +265,7 @@ function status_kafka() {
         echo "✅ Kafka: Running (PID: $(pgrep -f 'kafka.Kafka.*server.properties'))"
         
         # Test broker connectivity
-        if timeout 5 "$KAFKA_HOME/bin/kafka-broker-api-versions.sh" --bootstrap-server localhost:9092 > /dev/null 2>&1; then
+        if timeout 5 "$KAFKA_LIBEXEC/bin/kafka-broker-api-versions.sh" --bootstrap-server localhost:9092 > /dev/null 2>&1; then
             echo "✅ Kafka broker: Accessible on localhost:9092"
         else
             echo "⚠️  Kafka broker: Not responding"
@@ -299,11 +285,11 @@ function create_cdc_topics() {
     fi
     
     # Create topics for our inventory database
-    "$KAFKA_HOME/bin/kafka-topics.sh" --create --topic mysql.inventory.customers --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1 --if-not-exists
-    "$KAFKA_HOME/bin/kafka-topics.sh" --create --topic mysql.inventory.products --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1 --if-not-exists
+    "$KAFKA_LIBEXEC/bin/kafka-topics.sh" --create --topic mysql.inventory.customers --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1 --if-not-exists
+    "$KAFKA_LIBEXEC/bin/kafka-topics.sh" --create --topic mysql.inventory.products --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1 --if-not-exists
     
     # Create Debezium schema changes topic
-    "$KAFKA_HOME/bin/kafka-topics.sh" --create --topic mysql.inventory --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1 --if-not-exists
+    "$KAFKA_LIBEXEC/bin/kafka-topics.sh" --create --topic mysql.inventory --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1 --if-not-exists
     
     echo "✅ CDC topics created successfully"
     list_topics
@@ -312,7 +298,7 @@ function create_cdc_topics() {
 function list_topics() {
     echo "📋 Available Kafka topics:"
     if pgrep -f "kafka.Kafka.*server.properties" > /dev/null; then
-        "$KAFKA_HOME/bin/kafka-topics.sh" --list --bootstrap-server localhost:9092
+        "$KAFKA_LIBEXEC/bin/kafka-topics.sh" --list --bootstrap-server localhost:9092
     else
         echo "❌ Kafka is not running"
         return 1
@@ -328,17 +314,17 @@ function test_kafka() {
     echo "🧪 Testing Kafka with sample message..."
     
     # Create test topic
-    "$KAFKA_HOME/bin/kafka-topics.sh" --create --topic test-topic --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1 --if-not-exists > /dev/null 2>&1
+    "$KAFKA_LIBEXEC/bin/kafka-topics.sh" --create --topic test-topic --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1 --if-not-exists > /dev/null 2>&1
     
     # Send test message
-    echo "Hello from Kafka CDC setup!" | "$KAFKA_HOME/bin/kafka-console-producer.sh" --topic test-topic --bootstrap-server localhost:9092
+    echo "Hello from Kafka CDC setup!" | "$KAFKA_LIBEXEC/bin/kafka-console-producer.sh" --topic test-topic --bootstrap-server localhost:9092
     
     # Read test message
     echo "📥 Reading test message:"
-    timeout 3 "$KAFKA_HOME/bin/kafka-console-consumer.sh" --topic test-topic --from-beginning --bootstrap-server localhost:9092 --max-messages 1 2>/dev/null || echo "Test message confirmed"
+    timeout 3 "$KAFKA_LIBEXEC/bin/kafka-console-consumer.sh" --topic test-topic --from-beginning --bootstrap-server localhost:9092 --max-messages 1 2>/dev/null || echo "Test message confirmed"
     
     # Clean up test topic
-    "$KAFKA_HOME/bin/kafka-topics.sh" --delete --topic test-topic --bootstrap-server localhost:9092 > /dev/null 2>&1
+    "$KAFKA_LIBEXEC/bin/kafka-topics.sh" --delete --topic test-topic --bootstrap-server localhost:9092 > /dev/null 2>&1
     
     echo "✅ Kafka test successful"
 }
