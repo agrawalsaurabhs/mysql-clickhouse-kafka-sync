@@ -149,7 +149,7 @@ pkill -f "clickhouse"
 - Check Kafka topics exist: `kafka-topics.sh --list`
 
 ### No data appearing in ClickHouse
-- Verify Debezium connector is running: `curl http://localhost:8083/connectors/mysql-connector/status`
+- Verify Debezium connector is running: `curl http://localhost:8083/connectors/mysql-inventory-connector/status`
 - Check Kafka topics have messages
 - Verify sink connector logs
 

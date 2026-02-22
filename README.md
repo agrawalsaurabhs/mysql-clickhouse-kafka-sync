@@ -18,57 +18,92 @@ MySQL (CDC) → Debezium → Kafka → Custom Sink Connector → ClickHouse
 
 ## Prerequisites
 
-- macOS (tested on latest)
-- Homebrew package manager
-- MySQL 8.0+ installed and configured
-- Kafka 3.7.0+ (binary installation)
-- Go 1.21+ for building sink connector
-- ClickHouse 25.12+
+- macOS (tested on latest versions)
+- Homebrew package manager (will be installed automatically if missing)
+
+**All other dependencies (MySQL, Kafka, ClickHouse, Go) will be installed automatically!**
 
 ## Quick Start
 
-### 1. Environment Setup
+### Option 1: Complete Automated Setup (Recommended)
 
-Clone and navigate to the project:
+For a completely fresh system, run our automated setup:
 
 ```bash
 git clone <your-repo>
 cd rds-ch-sync
+./scripts/setup-all.sh
 ```
 
-### 2. Start Infrastructure
+This will automatically:
 
-**Start MySQL:**
+- Install Homebrew (if needed)
+- Install and configure MySQL 8.0+ with CDC settings
+- Install Apache Kafka with Zookeeper
+- Install ClickHouse
+- Install Go and build the sink connector
+- Create required databases and sample data
+- Set up all configuration files
 
+### Option 2: Manual Setup
+
+If you prefer to install components individually:
+
+**Setup MySQL:**
+
+```bash
+./scripts/mysql.sh setup
+```
+
+**Setup Kafka:**
+
+```bash
+./scripts/kafka.sh setup
+```
+
+**Setup ClickHouse:**
+
+```bash
+./scripts/clickhouse.sh setup
+```
+
+**Setup Debezium:**
+
+```bash
+./scripts/debezium.sh setup
+```
+
+**Setup sink connector:**
+
+```bash
+./scripts/sink.sh setup
+```
+
+### 3. Start the Pipeline
+
+After setup is complete, start the complete pipeline:
+
+```bash
+./scripts/start-pipeline.sh
+```
+
+Or start components individually:
+
+**Start services:**
 ```bash
 ./scripts/mysql.sh start
-```
-
-**Start Kafka ecosystem:**
-
-```bash
 ./scripts/kafka.sh start
-```
-
-**Start ClickHouse:**
-
-```bash
 ./scripts/clickhouse.sh start
 ```
 
-### 3. Configure CDC Pipeline
-
-**Deploy Debezium connector:**
-
+**Configure CDC pipeline:**
 ```bash
 ./scripts/debezium.sh start
 ./scripts/debezium.sh create-connector
 ```
 
-**Build and start sink connector:**
-
+**Start sink connector:**
 ```bash
-./scripts/sink.sh build
 ./scripts/sink.sh start
 ```
 
@@ -87,8 +122,70 @@ cd rds-ch-sync
 **Test CDC:**
 
 ```bash
-./scripts/debezium.sh test-cdc
+./scripts/mysql.sh changes
 ./scripts/sink.sh test-clickhouse
+```
+
+## Management Commands
+
+### Complete System Management
+```bash
+./scripts/setup-all.sh        # Install and configure all components
+./scripts/health-check.sh      # Check health of all components
+```
+
+### MySQL Management
+```bash
+./scripts/mysql.sh setup      # Complete setup (install, configure, secure)
+./scripts/mysql.sh start      # Start MySQL server
+./scripts/mysql.sh stop       # Stop MySQL server
+./scripts/mysql.sh status     # Check CDC configuration
+./scripts/mysql.sh test       # Test connection
+./scripts/mysql.sh data       # Show sample data
+./scripts/mysql.sh changes    # Simulate CDC changes
+./scripts/mysql.sh reset      # Reset sample data
+./scripts/mysql.sh diagnose   # Run diagnostic checks
+```
+
+### Kafka Management
+```bash
+./scripts/kafka.sh setup      # Complete setup (install, configure)
+./scripts/kafka.sh start      # Start Zookeeper and Kafka
+./scripts/kafka.sh stop       # Stop Kafka and Zookeeper
+./scripts/kafka.sh status     # Show service status
+./scripts/kafka.sh test       # Test Kafka with sample message
+./scripts/kafka.sh topics     # List all Kafka topics
+./scripts/kafka.sh diagnose   # Run diagnostic checks
+```
+
+### ClickHouse Management
+```bash
+./scripts/clickhouse.sh setup    # Complete setup (install, configure, initialize)
+./scripts/clickhouse.sh start    # Start ClickHouse server
+./scripts/clickhouse.sh stop     # Stop ClickHouse server
+./scripts/clickhouse.sh status   # Show service status
+./scripts/clickhouse.sh diagnose # Run diagnostic checks
+```
+
+### Debezium Management
+```bash
+./scripts/debezium.sh setup             # Complete setup (install, configure)
+./scripts/debezium.sh start             # Start Kafka Connect
+./scripts/debezium.sh create-connector  # Create MySQL connector
+./scripts/debezium.sh connector-status  # Show connector status
+./scripts/debezium.sh test              # Test CDC pipeline
+./scripts/debezium.sh diagnose          # Run diagnostic checks
+```
+
+### Sink Connector Management
+```bash
+./scripts/sink.sh setup           # Complete setup (install Go, build)
+./scripts/sink.sh start           # Start sink connector
+./scripts/sink.sh stop            # Stop sink connector
+./scripts/sink.sh status          # Check connector status
+./scripts/sink.sh build           # Build the connector binary
+./scripts/sink.sh test-clickhouse # Test ClickHouse connection
+./scripts/sink.sh diagnose        # Run diagnostic checks
 ```
 
 ## Project Structure
@@ -102,7 +199,7 @@ rds-ch-sync/
 │   ├── debezium.sh           # Debezium connector management
 │   └── sink.sh               # Sink connector management
 ├── debezium/
-│   ├── mysql-connector-simple.json    # Debezium configuration
+│   ├── mysql-connector.json           # Debezium configuration
 │   └── connect-distributed.properties # Kafka Connect settings
 ├── sink-connector/
 │   ├── main.go               # Sink connector implementation
@@ -126,7 +223,7 @@ The pipeline captures changes from MySQL tables in the `inventory` database:
 
 ### Debezium Configuration
 
-Key settings in [`debezium/mysql-connector-simple.json`](debezium/mysql-connector-simple.json):
+Key settings in [`debezium/mysql-connector.json`](debezium/mysql-connector.json):
 
 ```json
 {

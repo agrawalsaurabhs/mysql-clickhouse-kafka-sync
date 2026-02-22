@@ -5,10 +5,10 @@
     <tcp_port>9000</tcp_port>
     <interserver_http_port>9009</interserver_http_port>
     
-    <path>/Users/saurabhagrawal/Desktop/samples/rds-ch-sync/clickhouse-data/</path>
-    <tmp_path>/Users/saurabhagrawal/Desktop/samples/rds-ch-sync/clickhouse-data/tmp/</tmp_path>
-    <user_files_path>/Users/saurabhagrawal/Desktop/samples/rds-ch-sync/clickhouse-data/user_files/</user_files_path>
-    <format_schema_path>/Users/saurabhagrawal/Desktop/samples/rds-ch-sync/clickhouse-data/format_schemas/</format_schema_path>
+    <path>./clickhouse-data/</path>
+    <tmp_path>./clickhouse-data/tmp/</tmp_path>
+    <user_files_path>./clickhouse-data/user_files/</user_files_path>
+    <format_schema_path>./clickhouse-data/format_schemas/</format_schema_path>
     
     <users>
         <default>
@@ -49,5 +49,5 @@
     </kafka>
     
     <!-- PID file -->
-    <pid_file>/Users/saurabhagrawal/Desktop/samples/rds-ch-sync/clickhouse-data/clickhouse.pid</pid_file>
+    <pid_file>./clickhouse-data/clickhouse.pid</pid_file>
 </clickhouse>

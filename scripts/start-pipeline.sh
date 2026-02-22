@@ -18,10 +18,15 @@ if ! command -v itermocil &> /dev/null; then
     exit 1
 fi
 
-# Check if MySQL is accessible
+# Check if MySQL is accessible and properly set up
+echo "📊 Checking MySQL setup..."
 if ! mysql -u debezium -pdebezium_password -e "SELECT 1" > /dev/null 2>&1; then
-    echo "❌ MySQL is not accessible. Please ensure MySQL is running."
-    exit 1
+    echo "❌ MySQL is not properly configured for CDC"
+    echo "🚀 Running MySQL setup..."
+    "$SCRIPT_DIR/mysql.sh" setup
+    echo "✅ MySQL setup completed"
+else
+    echo "✅ MySQL is ready"
 fi
 
 # Ensure MySQL database is initialized

@@ -20,6 +20,9 @@ kafka-logs/
 zookeeper-data/
 connect.offsets/
 
+# Downloaded Kafka distribution
+kafka_2.13-*/
+
 # MySQL data directory (if running locally)
 mysql-data/
 *.mysql

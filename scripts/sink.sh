@@ -1,7 +1,113 @@
 #!/bin/bash
 
+# MySQL to ClickHouse Sink Connector Management Script - Self-sufficient setup
+set -e
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SINK_DIR="$SCRIPT_DIR/../sink-connector"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+function check_dependencies() {
+    echo "🔍 Checking sink connector dependencies..."
+    
+    # Check Go installation
+    if ! command -v go &> /dev/null; then
+        echo "📦 Installing Go..."
+        brew install go
+        echo "✅ Go installed successfully"
+    else
+        echo "✅ Go is available: $(go version)"
+    fi
+    
+    # Check if ClickHouse is accessible
+    if ! command -v clickhouse &> /dev/null; then
+        echo "⚠️  ClickHouse not installed"
+        echo "💡 Run: ./scripts/clickhouse.sh setup"
+    fi
+}
+
+function setup_sink_dependencies() {
+    echo "📂 Setting up sink connector dependencies..."
+    
+    cd "$SINK_DIR"
+    
+    if [ ! -f "go.mod" ]; then
+        echo "📝 Initializing Go module..."
+        go mod init mysql-clickhouse-sink
+    fi
+    
+    echo "📦 Installing Go dependencies..."
+    go mod tidy
+    
+    echo "✅ Dependencies ready"
+}
+
+function setup_sink() {
+    echo "🏗️ Setting up MySQL to ClickHouse sink connector..."
+    echo ""
+    
+    check_dependencies
+    setup_sink_dependencies
+    build_sink
+    
+    echo ""
+    echo "✅ Sink connector setup completed successfully!"
+    echo ""
+    echo "📊 Details:"
+    echo "   Source Directory: $SINK_DIR"
+    echo "   Binary: $SINK_DIR/mysql-clickhouse-sink"
+    echo "   Config: $SINK_DIR/config.hjson"
+    echo ""
+}
+
+function diagnose_sink() {
+    echo "🔍 Sink Connector Diagnostics"
+    echo "============================="
+    echo ""
+    
+    echo "📋 Installation Status:"
+    if command -v go &> /dev/null; then
+        echo "   ✅ Go installed: $(go version)"
+    else
+        echo "   ❌ Go not installed"
+    fi
+    
+    if [ -f "$SINK_DIR/main.go" ]; then
+        echo "   ✅ Source code exists: $SINK_DIR/main.go"
+    else
+        echo "   ❌ Source code missing"
+    fi
+    
+    if [ -f "$SINK_DIR/mysql-clickhouse-sink" ]; then
+        echo "   ✅ Binary built: $SINK_DIR/mysql-clickhouse-sink"
+    else
+        echo "   ❌ Binary not built"
+    fi
+    
+    if [ -f "$SINK_DIR/config.hjson" ]; then
+        echo "   ✅ Config exists: $SINK_DIR/config.hjson"
+    else
+        echo "   ⚠️  Config file missing"
+    fi
+    
+    echo ""
+    echo "📋 Service Status:"
+    if pgrep -f "mysql-clickhouse-sink" > /dev/null; then
+        echo "   ✅ Sink connector running (PID: $(pgrep -f 'mysql-clickhouse-sink'))"
+    else
+        echo "   ❌ Sink connector not running"
+    fi
+    
+    echo ""
+    echo "💡 Recommended Actions:"
+    if [ ! -f "$SINK_DIR/mysql-clickhouse-sink" ]; then
+        echo "   → Run: $0 setup"
+    elif ! pgrep -f "mysql-clickhouse-sink" > /dev/null; then
+        echo "   → Run: $0 start"
+    else
+        echo "   → Everything looks good! Try: $0 status"
+    fi
+}
 
 function start_sink() {
     echo "Starting MySQL to ClickHouse sink connector..."
@@ -99,21 +205,37 @@ function show_help() {
     echo ""
     echo "Usage: $0 [COMMAND]"
     echo ""
-    echo "Commands:"
+    echo "Setup Commands:"
+    echo "  setup              Complete sink connector setup (install Go, build)"
+    echo "  diagnose           Run diagnostic checks"
+    echo ""
+    echo "Service Commands:"
     echo "  start              Start the sink connector"
     echo "  stop               Stop the sink connector"
     echo "  restart            Restart the sink connector"
     echo "  status             Check connector status"
+    echo ""
+    echo "Build Commands:"
     echo "  build              Build the connector binary"
     echo "  clean              Clean build artifacts"
+    echo ""
+    echo "Testing Commands:"
     echo "  logs               View connector logs"
     echo "  test-clickhouse    Test ClickHouse connection and show table stats"
     echo "  help               Show this help message"
+    echo ""
+    echo "🚀 For first-time setup, run: $0 setup"
     echo ""
 }
 
 # Main command handling
 case "$1" in
+    "setup")
+        setup_sink
+        ;;
+    "diagnose")
+        diagnose_sink
+        ;;
     "start")
         start_sink
         ;;

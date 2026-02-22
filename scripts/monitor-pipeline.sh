@@ -40,7 +40,7 @@ function get_mysql_stats() {
 }
 
 function get_kafka_topics() {
-    local topics=$(/Users/saurabhagrawal/software/kafka_2.13-3.7.0/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list 2>/dev/null | grep -E "inventory" || echo "none")
+    local topics=$("$PROJECT_DIR/kafka_2.13-3.7.0/bin/kafka-topics.sh" --bootstrap-server localhost:9092 --list 2>/dev/null | grep -E "inventory" || echo "none")
     echo -e "   Topics: ${BLUE}$topics${NC}"
 }
 
@@ -51,7 +51,7 @@ function get_clickhouse_stats() {
 }
 
 function get_connector_status() {
-    local status=$(curl -s http://localhost:8083/connectors/mysql-connector/status 2>/dev/null | jq -r '.connector.state' 2>/dev/null || echo "UNKNOWN")
+    local status=$(curl -s http://localhost:8083/connectors/mysql-inventory-connector/status 2>/dev/null | jq -r '.connector.state' 2>/dev/null || echo "UNKNOWN")
     if [ "$status" = "RUNNING" ]; then
         echo -e "   Status: ${GREEN}$status${NC}"
     else
@@ -59,7 +59,7 @@ function get_connector_status() {
     fi
     
     # Get tasks status
-    local tasks=$(curl -s http://localhost:8083/connectors/mysql-connector/status 2>/dev/null | jq -r '.tasks[].state' 2>/dev/null)
+    local tasks=$(curl -s http://localhost:8083/connectors/mysql-inventory-connector/status 2>/dev/null | jq -r '.tasks[].state' 2>/dev/null)
     if [ ! -z "$tasks" ]; then
         echo -e "   Tasks: ${BLUE}$tasks${NC}"
     fi

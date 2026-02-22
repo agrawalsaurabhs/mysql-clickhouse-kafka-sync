@@ -1,15 +1,136 @@
 #!/bin/bash
 
-# Debezium Kafka Connect Management Script
+# Debezium Kafka Connect Management Script - Self-sufficient setup
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-KAFKA_HOME="/Users/saurabhagrawal/software/kafka_2.13-3.7.0"
+KAFKA_VERSION="2.13-3.7.0"
+KAFKA_HOME="$PROJECT_DIR/kafka_$KAFKA_VERSION"
 CONNECT_CONFIG="$PROJECT_DIR/debezium/connect-distributed.properties"
 CONNECTOR_CONFIG="$PROJECT_DIR/debezium/mysql-connector.json"
 CONNECT_LOG="$PROJECT_DIR/kafka-data/connect.log"
+DEBEZIUM_VERSION="2.4.0.Final"
+DEBEZIUM_CONNECTOR_DIR="$PROJECT_DIR/debezium/debezium-connector-mysql"
+DEBEZIUM_URL="https://repo1.maven.org/maven2/io/debezium/debezium-connector-mysql/$DEBEZIUM_VERSION/debezium-connector-mysql-$DEBEZIUM_VERSION-plugin.tar.gz"
+function check_dependencies() {
+    echo "🔍 Checking Debezium dependencies..."
+    
+    if [ ! -d "$KAFKA_HOME" ]; then
+        echo "❌ Kafka not found at $KAFKA_HOME"
+        echo "💡 Run: ./scripts/kafka.sh setup"
+        exit 1
+    fi
+    
+    echo "✅ Kafka installation found"
+}
 
+function download_debezium() {
+    echo "⬇️ Downloading Debezium MySQL connector..."
+    
+    local temp_dir="/tmp/debezium_download"
+    mkdir -p "$temp_dir"
+    
+    if [ ! -f "$temp_dir/debezium-connector.tar.gz" ]; then
+        echo "📥 Downloading Debezium connector $DEBEZIUM_VERSION..."
+        curl -L "$DEBEZIUM_URL" -o "$temp_dir/debezium-connector.tar.gz"
+    fi
+    
+    echo "📦 Extracting Debezium connector..."
+    rm -rf "$DEBEZIUM_CONNECTOR_DIR"
+    mkdir -p "$PROJECT_DIR/debezium"
+    tar -xzf "$temp_dir/debezium-connector.tar.gz" -C "$PROJECT_DIR/debezium/"
+    
+    # The extracted folder might have a different name, let's find it and rename
+    local extracted_dir=$(find "$PROJECT_DIR/debezium" -name "debezium-connector-mysql*" -type d | head -1)
+    if [ "$extracted_dir" != "$DEBEZIUM_CONNECTOR_DIR" ]; then
+        mv "$extracted_dir" "$DEBEZIUM_CONNECTOR_DIR"
+    fi
+    
+    echo "✅ Debezium connector downloaded and extracted"
+}
+
+function install_debezium() {
+    echo "📦 Installing Debezium MySQL connector..."
+    
+    if [ -d "$DEBEZIUM_CONNECTOR_DIR" ]; then
+        echo "✅ Debezium connector is already installed at $DEBEZIUM_CONNECTOR_DIR"
+        return 0
+    fi
+    
+    check_dependencies
+    download_debezium
+    
+    echo "✅ Debezium connector installation completed"
+}
+
+function setup_debezium() {
+    echo "🏗️ Setting up Debezium for CDC pipeline..."
+    echo ""
+    
+    check_dependencies
+    install_debezium
+    
+    echo ""
+    echo "✅ Debezium setup completed successfully!"
+    echo ""
+    echo "📊 Installation Details:"
+    echo "   Connector Path: $DEBEZIUM_CONNECTOR_DIR"
+    echo "   Config File: $CONNECT_CONFIG"
+    echo "   Connector Config: $CONNECTOR_CONFIG"
+    echo ""
+}
+
+function diagnose_debezium() {
+    echo "🔍 Debezium Setup Diagnostics"
+    echo "============================="
+    echo ""
+    
+    echo "📋 Installation Status:"
+    if [ -d "$KAFKA_HOME" ]; then
+        echo "   ✅ Kafka found at: $KAFKA_HOME"
+    else
+        echo "   ❌ Kafka not found"
+    fi
+    
+    if [ -d "$DEBEZIUM_CONNECTOR_DIR" ]; then
+        echo "   ✅ Debezium connector installed at: $DEBEZIUM_CONNECTOR_DIR"
+    else
+        echo "   ❌ Debezium connector not installed"
+    fi
+    
+    if [ -f "$CONNECT_CONFIG" ]; then
+        echo "   ✅ Connect config exists: $CONNECT_CONFIG"
+    else
+        echo "   ❌ Connect config missing"
+    fi
+    
+    echo ""
+    echo "📋 Service Status:"
+    if pgrep -f "ConnectDistributed.*connect-distributed.properties" > /dev/null; then
+        echo "   ✅ Kafka Connect running (PID: $(pgrep -f 'ConnectDistributed.*connect-distributed.properties'))"
+    else
+        echo "   ❌ Kafka Connect not running"
+    fi
+    
+    echo ""
+    echo "📋 API Status:"
+    if curl -s http://localhost:8083/ > /dev/null 2>&1; then
+        echo "   ✅ Connect API accessible at http://localhost:8083"
+    else
+        echo "   ❌ Connect API not accessible"
+    fi
+    
+    echo ""
+    echo "💡 Recommended Actions:"
+    if [ ! -d "$DEBEZIUM_CONNECTOR_DIR" ]; then
+        echo "   → Run: $0 setup"
+    elif ! pgrep -f "ConnectDistributed.*connect-distributed.properties" > /dev/null; then
+        echo "   → Run: $0 start"
+    else
+        echo "   → Everything looks good! Try: $0 connector-status"
+    fi
+}
 function start_kafka_connect() {
     if pgrep -f "ConnectDistributed.*connect-distributed.properties" > /dev/null; then
         echo "✅ Kafka Connect is already running (PID: $(pgrep -f 'ConnectDistributed.*connect-distributed.properties'))"
@@ -231,6 +352,15 @@ function show_logs() {
 }
 
 case "$1" in
+    setup)
+        setup_debezium
+        ;;
+    install)
+        install_debezium
+        ;;
+    diagnose)
+        diagnose_debezium
+        ;;
     start)
         start_kafka_connect
         ;;
@@ -272,21 +402,32 @@ case "$1" in
         show_connector_status
         ;;
     *)
-        echo "Usage: $0 {start|stop|restart|status|create-connector|delete-connector|connector-status|restart-connector|test|topics|logs|full}"
+        echo "Usage: $0 {setup|install|diagnose|start|stop|restart|status|create-connector|delete-connector|connector-status|restart-connector|test|topics|logs|full}"
         echo ""
-        echo "Commands:"
+        echo "Setup Commands:"
+        echo "  setup             - Complete Debezium setup (install, configure)"
+        echo "  install           - Install Debezium MySQL connector"
+        echo "  diagnose          - Run diagnostic checks"
+        echo ""
+        echo "Service Commands:"
         echo "  start             - Start Kafka Connect"
         echo "  stop              - Stop Kafka Connect"
         echo "  restart           - Restart Kafka Connect"
-        echo "  status            - Show Kafka Connect status"
+        echo ""
+        echo "Connector Commands:"
         echo "  create-connector  - Create MySQL connector"
         echo "  delete-connector  - Delete MySQL connector"
         echo "  connector-status  - Show connector status"
         echo "  restart-connector - Restart MySQL connector"
+        echo ""
+        echo "Testing Commands:"
+        echo "  status            - Show Kafka Connect status"
         echo "  test              - Test CDC pipeline with sample changes"
         echo "  topics            - Show recent CDC data in topics"
         echo "  logs              - Show Kafka Connect logs"
         echo "  full              - Show complete status"
+        echo ""
+        echo "🚀 For first-time setup, run: $0 setup"
         exit 1
         ;;
 esac
