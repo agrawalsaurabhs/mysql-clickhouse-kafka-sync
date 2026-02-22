@@ -160,7 +160,7 @@ function start_zookeeper() {
     fi
     
     echo "🚀 Starting Zookeeper..."
-    cd "$KAFKA_HOME"
+    cd "$KAFKA_LIBEXEC"
     ./bin/zookeeper-server-start.sh "$ZK_CONFIG" > "$PROJECT_DIR/kafka-data/zookeeper.log" 2>&1 &
     sleep 3
     
@@ -175,7 +175,7 @@ function start_zookeeper() {
 function stop_zookeeper() {
     if pgrep -f "QuorumPeerMain.*zookeeper" > /dev/null; then
         echo "🛑 Stopping Zookeeper..."
-        cd "$KAFKA_HOME"
+        cd "$KAFKA_LIBEXEC"
         ./bin/zookeeper-server-stop.sh
         sleep 2
         echo "✅ Zookeeper stopped"
@@ -201,7 +201,7 @@ function start_kafka() {
     rm -rf "$PROJECT_DIR/kafka-data/kafka-logs/meta.properties" 2>/dev/null || true
     
     echo "🚀 Starting Kafka server..."
-    cd "$KAFKA_HOME"
+    cd "$KAFKA_LIBEXEC"
     ./bin/kafka-server-start.sh "$KAFKA_CONFIG" > "$PROJECT_DIR/kafka-data/kafka.log" 2>&1 &
     
     # Wait longer for Kafka to fully start
@@ -229,7 +229,7 @@ function start_kafka() {
 function stop_kafka() {
     if pgrep -f "kafka.Kafka.*server.properties" > /dev/null; then
         echo "🛑 Stopping Kafka server..."
-        cd "$KAFKA_HOME"
+        cd "$KAFKA_LIBEXEC"
         ./bin/kafka-server-stop.sh
         
         # Wait for graceful shutdown

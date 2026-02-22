@@ -22,8 +22,8 @@ MYSQL_PORT="${MYSQL_PORT:-3306}"
 MYSQL_USER="${MYSQL_USER:-debezium}"
 MYSQL_PASSWORD="${MYSQL_PASSWORD:-debezium_password}"
 
-KAFKA_VERSION="2.13-3.7.0"
-KAFKA_HOME="$PROJECT_DIR/kafka_$KAFKA_VERSION"
+# Use Homebrew Kafka installation
+KAFKA_LIBEXEC="${KAFKA_LIBEXEC:-$(brew --prefix kafka)/libexec}"
 CONNECT_CONFIG="$PROJECT_DIR/debezium/connect-distributed.properties"
 CONNECTOR_CONFIG="$PROJECT_DIR/debezium/mysql-connector.json"
 CONNECT_LOG="$PROJECT_DIR/kafka-data/connect.log"
@@ -33,9 +33,9 @@ DEBEZIUM_URL="https://repo1.maven.org/maven2/io/debezium/debezium-connector-mysq
 function check_dependencies() {
     echo "🔍 Checking Debezium dependencies..."
     
-    if [ ! -d "$KAFKA_HOME" ]; then
-        echo "❌ Kafka not found at $KAFKA_HOME"
-        echo "💡 Run: ./scripts/kafka.sh setup"
+    if [ ! -d "$KAFKA_LIBEXEC" ]; then
+        echo "❌ Kafka not found at $KAFKA_LIBEXEC"
+        echo "💡 Install Kafka: brew install kafka"
         exit 1
     fi
     
@@ -104,8 +104,8 @@ function diagnose_debezium() {
     echo ""
     
     echo "📋 Installation Status:"
-    if [ -d "$KAFKA_HOME" ]; then
-        echo "   ✅ Kafka found at: $KAFKA_HOME"
+    if [ -d "$KAFKA_LIBEXEC" ]; then
+        echo "   ✅ Kafka found at: $KAFKA_LIBEXEC"
     else
         echo "   ❌ Kafka not found"
     fi
@@ -162,7 +162,7 @@ function start_kafka_connect() {
     fi
     
     echo "🚀 Starting Kafka Connect..."
-    cd "$KAFKA_HOME"
+    cd "$KAFKA_LIBEXEC"
     
     # Set CLASSPATH to include Debezium connector
     export CLASSPATH="$PROJECT_DIR/debezium/debezium-connector-mysql/*:$CLASSPATH"
@@ -328,7 +328,7 @@ function show_topics_with_data() {
     
     for topic in "${topics[@]}"; do
         echo "--- Topic: $topic ---"
-        timeout 3 "$KAFKA_HOME/bin/kafka-console-consumer.sh" \
+        timeout 3 "$KAFKA_LIBEXEC/bin/kafka-console-consumer.sh" \
             --topic "$topic" \
             --bootstrap-server localhost:9092 \
             --from-beginning \
