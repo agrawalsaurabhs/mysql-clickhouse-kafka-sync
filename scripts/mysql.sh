@@ -8,9 +8,9 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 function test_mysql_connection() {
     echo "Testing MySQL connection..."
-    if mysql -e "SELECT 'MySQL Connection OK' as status;" > /dev/null 2>&1; then
+    if mysql -u debezium -pdebezium_password -e "SELECT 'MySQL Connection OK' as status;" > /dev/null 2>&1; then
         echo "✅ MySQL connection successful"
-        mysql -e "SELECT VERSION() as mysql_version;"
+        mysql -u debezium -pdebezium_password -e "SELECT VERSION() as mysql_version;"
     else
         echo "❌ MySQL connection failed"
         return 1
@@ -21,24 +21,24 @@ function check_cdc_config() {
     echo "Checking MySQL CDC configuration..."
     
     echo "📊 Binary Logging Status:"
-    mysql -e "SHOW VARIABLES LIKE 'log_bin';"
+    mysql -u debezium -pdebezium_password -e "SHOW VARIABLES LIKE 'log_bin';"
     
     echo "📊 Binary Log Format:"
-    mysql -e "SHOW VARIABLES LIKE 'binlog_format';"
+    mysql -u debezium -pdebezium_password -e "SHOW VARIABLES LIKE 'binlog_format';"
     
     echo "📊 Binary Log Row Image:"
-    mysql -e "SHOW VARIABLES LIKE 'binlog_row_image';"
+    mysql -u debezium -pdebezium_password -e "SHOW VARIABLES LIKE 'binlog_row_image';"
     
     echo "📊 Master Status:"
-    mysql -e "SHOW MASTER STATUS;"
+    mysql -u debezium -pdebezium_password -e "SHOW MASTER STATUS;"
     
     echo "📊 Debezium User Privileges:"
-    mysql -e "SHOW GRANTS FOR 'debezium'@'localhost';" 2>/dev/null || echo "Debezium user not found"
+    mysql -u debezium -pdebezium_password -e "SHOW GRANTS FOR 'debezium'@'localhost';" 2>/dev/null || echo "Debezium user not found"
 }
 
 function show_sample_data() {
     echo "📋 Sample Data Overview:"
-    mysql -e "
+    mysql -u debezium -pdebezium_password -e "
     USE inventory;
     SELECT 'Customers Count:' as info, COUNT(*) as count FROM customers
     UNION ALL
@@ -46,16 +46,16 @@ function show_sample_data() {
     "
     
     echo "📋 Recent Customers:"
-    mysql -e "USE inventory; SELECT * FROM customers LIMIT 3;"
+    mysql -u debezium -pdebezium_password -e "USE inventory; SELECT * FROM customers LIMIT 3;"
     
     echo "📋 Recent Products:"
-    mysql -e "USE inventory; SELECT * FROM products LIMIT 3;"
+    mysql -u debezium -pdebezium_password -e "USE inventory; SELECT * FROM products LIMIT 3;"
 }
 
 function simulate_changes() {
     echo "🔄 Simulating database changes for CDC testing..."
     
-    mysql -e "
+    mysql -u debezium -pdebezium_password -e "
     USE inventory;
     
     -- Insert a new customer

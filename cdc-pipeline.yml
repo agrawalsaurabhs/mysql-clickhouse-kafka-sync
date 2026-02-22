@@ -1,0 +1,62 @@
+# CDC Pipeline - MySQL to ClickHouse via Debezium
+# Usage: itermocil cdc-pipeline
+
+windows:
+  - name: cdc-pipeline
+    root: ~/Desktop/samples/rds-ch-sync
+    layout: tiled
+    panes:
+      - name: Kafka Broker
+        commands:
+          - clear
+          - echo "=== Kafka Broker ==="
+          - ./scripts/kafka.sh start
+          - tail -f kafka-data/kafka.log
+      
+      - name: ClickHouse
+        commands:
+          - clear
+          - echo "=== ClickHouse Server ==="
+          - ./scripts/clickhouse.sh start
+          - sleep 2
+          - clickhouse client --query "SELECT 'ClickHouse Ready' as status"
+          - echo "Monitoring ClickHouse logs..."
+          - tail -f clickhouse-data/clickhouse-server.err.log 2>/dev/null || echo "No error logs yet"
+      
+      - name: Debezium CDC
+        commands:
+          - clear
+          - echo "=== Debezium Kafka Connect ==="
+          - sleep 5
+          - ./scripts/debezium.sh start
+          - sleep 3
+          - echo "Deploying MySQL connector..."
+          - ./scripts/debezium.sh create-connector
+          - sleep 2
+          - tail -f kafka-data/connect.log
+      
+      - name: Sink Connector
+        commands:
+          - clear
+          - echo "=== ClickHouse Sink Connector ==="
+          - sleep 10
+          - cd sink-connector
+          - echo "Building sink connector..."
+          - go build -o mysql-clickhouse-sink main.go
+          - echo "Starting sink connector..."
+          - ./mysql-clickhouse-sink
+      
+      - name: Data Generator
+        commands:
+          - clear
+          - echo "=== Data Generator ==="
+          - sleep 15
+          - echo "Starting continuous data insertion..."
+          - ./scripts/generate-data.sh
+      
+      - name: Pipeline Monitor
+        commands:
+          - clear
+          - echo "=== Pipeline Monitor ==="
+          - sleep 20
+          - ./scripts/monitor-pipeline.sh

@@ -105,9 +105,9 @@ function create_mysql_connector() {
     
     # Check if connector already exists
     if curl -s http://localhost:8083/connectors/mysql-inventory-connector > /dev/null 2>&1; then
-        echo "⚠️  Connector already exists. Deleting first..."
-        delete_mysql_connector
-        sleep 2
+        echo "✅ Connector already exists. Checking status..."
+        show_connector_status
+        return 0
     fi
     
     # Create the connector
@@ -205,7 +205,7 @@ function test_cdc_pipeline() {
     fi
     
     echo "🔄 Making test changes to MySQL..."
-    mysql -e "
+    mysql -u debezium -pdebezium_password -e "
     USE inventory;
     INSERT INTO customers (first_name, last_name, email) 
     VALUES ('CDC', 'Test', 'cdc.test@example.com');
