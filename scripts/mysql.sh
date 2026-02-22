@@ -9,7 +9,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 # MySQL configuration
 MYSQL_USER="debezium"
 MYSQL_PASSWORD="debezium_password"
-MYSQL_ROOT_PASSWORD="root_password"
+MYSQL_ROOT_PASSWORD="password"
 MYSQL_PORT="3306"
 MYSQL_DATA_DIR="$PROJECT_DIR/mysql-data"
 MYSQL_CONFIG_FILE="$PROJECT_DIR/mysql/my.cnf"

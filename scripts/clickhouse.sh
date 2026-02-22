@@ -66,7 +66,7 @@ function initialize_database() {
     fi
     
     # Create database and check if tables exist
-    clickhouse client --query "CREATE DATABASE IF NOT EXISTS mysql_sync;"
+    /opt/homebrew/bin/clickhouse client --query "CREATE DATABASE IF NOT EXISTS mysql_sync"
     
     local table_count=$(clickhouse client --query "SELECT count() FROM system.tables WHERE database = 'mysql_sync'" 2>/dev/null)
     
@@ -141,14 +141,14 @@ function diagnose_clickhouse() {
     echo "📋 Connection Test:"
     if clickhouse client --query "SELECT 1" > /dev/null 2>&1; then
         echo "   ✅ Can connect to ClickHouse"
-        echo "   📊 Version: $(clickhouse client --query "SELECT version()")"
+        echo "   📊 Version: $(/opt/homebrew/bin/clickhouse client --query "SELECT version()")"
     else
         echo "   ❌ Cannot connect to ClickHouse"
     fi
     
     echo ""
     echo "💡 Recommended Actions:"
-    if ! command -v clickhouse &> /dev/null; then
+    if ! command -v /opt/homebrew/bin/clickhouse &> /dev/null; then
         echo "   → Run: $0 setup"
     elif ! [[ -f "$PID_FILE" ]] || ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
         echo "   → Run: $0 start"
@@ -164,7 +164,7 @@ function start_clickhouse() {
     fi
     
     echo "Starting ClickHouse server..."
-    clickhouse server --config-file="$CLICKHOUSE_CONFIG" --daemon --pid-file="$PID_FILE"
+    /opt/homebrew/bin/clickhouse server --config-file="$CLICKHOUSE_CONFIG" --daemon --pid-file="$PID_FILE"
     sleep 2
     
     if clickhouse client --query "SELECT 1" > /dev/null 2>&1; then
@@ -202,7 +202,7 @@ function stop_clickhouse() {
 function status_clickhouse() {
     if [[ -f "$PID_FILE" ]] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
         echo "✅ ClickHouse is running (PID: $(cat "$PID_FILE"))"
-        clickhouse client --query "SELECT version()" | sed 's/^/   Version: /'
+        /opt/homebrew/bin/clickhouse client --query "SELECT version()" | sed 's/^/   Version: /'
     else
         echo "❌ ClickHouse is not running"
         return 1
