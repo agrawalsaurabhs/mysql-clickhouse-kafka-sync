@@ -61,22 +61,52 @@ fi
 echo "🔧 Setting up scripts..."
 chmod +x "$PROJECT_DIR"/scripts/*.sh
 
-# Check if Zookeeper data directory exists
-if [ ! -d "/tmp/zookeeper" ]; then
-    mkdir -p /tmp/zookeeper
+# Check if Kafka data directory exists
+if [ ! -d "$PROJECT_DIR/kafka-data" ]; then
+    mkdir -p "$PROJECT_DIR/kafka-data/kafka-logs"
 fi
 
 echo ""
 echo "✅ Pre-flight checks complete!"
 echo ""
+
+# Validate critical services can start
+echo "🔍 Validating services..."
+
+# Check if Kafka can start
+if ! "$SCRIPT_DIR/kafka.sh" status > /dev/null 2>&1; then
+    echo "⚠️  Starting Kafka for validation..."
+    "$SCRIPT_DIR/kafka.sh" start
+    if ! "$SCRIPT_DIR/kafka.sh" status > /dev/null 2>&1; then
+        echo "❌ Kafka failed to start. Check configuration."
+        exit 1
+    fi
+fi
+echo "✅ Kafka is ready"
+
+# Check if ClickHouse can start (but don't require it to be running)
+if command -v clickhouse &> /dev/null; then
+    echo "✅ ClickHouse is available"
+else
+    echo "⚠️  ClickHouse not found - will be started in pipeline"
+fi
+
+# Validate MySQL connectivity one more time
+if ! mysql -u debezium -pdebezium_password -e "SELECT 1" > /dev/null 2>&1; then
+    echo "❌ MySQL connectivity failed after setup"
+    exit 1
+fi
+echo "✅ MySQL connectivity verified"
+
+echo ""
 echo "🎬 Launching CDC Pipeline in iTerm2..."
 echo ""
 echo "The pipeline will start in this order:"
-echo "  1. Kafka & Zookeeper"
+echo "  1. Kafka (KRaft mode)"
 echo "  2. ClickHouse Server"
 echo "  3. Debezium Kafka Connect"
 echo "  4. Sink Connector"
-echo "  5. Data Generator (inserts records every 0.5s)"
+echo "  5. Data Generator (inserts records every 5s)"
 echo "  6. Pipeline Monitor"
 echo ""
 echo "📊 You can also access:"

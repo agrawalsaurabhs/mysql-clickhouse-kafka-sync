@@ -18,31 +18,43 @@ windows:
           - clear
           - echo "=== ClickHouse Server ==="
           - ./scripts/clickhouse.sh start
-          - sleep 2
-          - clickhouse client --query "SELECT 'ClickHouse Ready' as status"
-          - echo "Monitoring ClickHouse logs..."
-          - tail -f clickhouse-data/clickhouse-server.err.log 2>/dev/null || echo "No error logs yet"
+          - sleep 3
+          - clickhouse client --query "SELECT 'ClickHouse Ready' as status" || echo "ClickHouse not ready yet..."
+          - echo "Monitoring ClickHouse status..."
+          - ./scripts/clickhouse.sh status
+          - echo "Watching logs (if available)..."
+          - tail -f clickhouse-data/clickhouse-server.err.log 2>/dev/null || tail -f clickhouse-data/clickhouse-server.log 2>/dev/null || echo "No logs available - checking status periodically..." && watch -n 5 ./scripts/clickhouse.sh status
       
       - name: Debezium CDC
         commands:
           - clear
           - echo "=== Debezium Kafka Connect ==="
-          - sleep 5
+          - echo "Waiting for Kafka to be ready..."
+          - sleep 8
           - ./scripts/debezium.sh start
-          - sleep 3
+          - sleep 5
+          - echo "Verifying Kafka Connect is running..."
+          - ./scripts/debezium.sh status
+          - sleep 2
           - echo "Deploying MySQL connector..."
+          - ./scripts/debezium.sh create-connector || echo "Connector creation failed, retrying..."
+          - sleep 3
           - ./scripts/debezium.sh create-connector
           - sleep 2
-          - tail -f kafka-data/connect.log
+          - echo "Monitoring Connect logs..."
+          - tail -f kafka-data/connect.log 2>/dev/null || echo "Connect log not available, checking status..." && ./scripts/debezium.sh status
       
       - name: Sink Connector
         commands:
           - clear
           - echo "=== ClickHouse Sink Connector ==="
-          - sleep 10
+          - echo "Waiting for Debezium to be ready..."
+          - sleep 15
           - cd sink-connector
           - echo "Building sink connector..."
           - go build -o mysql-clickhouse-sink main.go
+          - echo "Waiting for topics to be created..."
+          - sleep 5
           - echo "Starting sink connector..."
           - ./mysql-clickhouse-sink
       
@@ -50,8 +62,9 @@ windows:
         commands:
           - clear
           - echo "=== Data Generator ==="
-          - sleep 15
-          - echo "Starting continuous data insertion..."
+          - echo "Waiting for pipeline to be ready..."
+          - sleep 20
+          - echo "Starting continuous CRUD operations (5s interval)..."
           - ./scripts/generate-data.sh
       
       - name: Pipeline Monitor

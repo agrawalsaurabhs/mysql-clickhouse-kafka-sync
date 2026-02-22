@@ -16,8 +16,7 @@ fi
 # Configuration with environment variable fallbacks
 KAFKA_HOST="${KAFKA_HOST:-localhost}"
 KAFKA_PORT="${KAFKA_PORT:-9092}"
-ZOOKEEPER_HOST="${ZOOKEEPER_HOST:-localhost}"
-ZOOKEEPER_PORT="${ZOOKEEPER_PORT:-2181}"
+KAFKA_CONTROLLER_PORT="${KAFKA_CONTROLLER_PORT:-9093}"
 
 # Executable paths with fallbacks
 HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-/opt/homebrew}"
@@ -27,8 +26,8 @@ BREW_BIN="${BREW_BIN:-brew}"
 KAFKA_HOME="$HOMEBREW_PREFIX/opt/kafka"
 KAFKA_LIBEXEC="$HOMEBREW_PREFIX/opt/kafka/libexec"
 KAFKA_CONFIG="$PROJECT_DIR/kafka-config/server.properties"
-ZK_CONFIG="$KAFKA_LIBEXEC/config/zookeeper.properties"
 KAFKA_DATA_DIR="$PROJECT_DIR/kafka-data"
+KAFKA_CLUSTER_ID="${KAFKA_CLUSTER_ID:-$(uuidgen | tr '[:upper:]' '[:lower:]' | tr -d '-' | cut -c1-22)}"
 
 function check_dependencies() {
     echo "🔍 Checking Kafka dependencies..."
@@ -67,7 +66,15 @@ function setup_kafka_dirs() {
     echo "📂 Setting up Kafka directories..."
     
     mkdir -p "$KAFKA_DATA_DIR/kafka-logs"
-    mkdir -p "/tmp/zookeeper"
+    
+    # Initialize KRaft cluster metadata if not exists
+    if [ ! -f "$KAFKA_DATA_DIR/kafka-logs/meta.properties" ]; then
+        echo "🔧 Initializing KRaft cluster metadata..."
+        cd "$KAFKA_LIBEXEC"
+        KAFKA_CLUSTER_ID="$(bin/kafka-storage.sh random-uuid)"
+        bin/kafka-storage.sh format -t "$KAFKA_CLUSTER_ID" -c "$KAFKA_CONFIG"
+        echo "✅ KRaft cluster initialized with ID: $KAFKA_CLUSTER_ID"
+    fi
     
     echo "✅ Kafka directories ready"
 }
@@ -110,14 +117,8 @@ function diagnose_kafka() {
     
     echo ""
     echo "📋 Service Status:"
-    if pgrep -f "QuorumPeerMain.*zookeeper" > /dev/null; then
-        echo "   ✅ Zookeeper running (PID: $(pgrep -f 'QuorumPeerMain.*zookeeper'))"
-    else
-        echo "   ❌ Zookeeper not running"
-    fi
-    
     if pgrep -f "kafka.Kafka.*server.properties" > /dev/null; then
-        echo "   ✅ Kafka running (PID: $(pgrep -f 'kafka.Kafka.*server.properties'))"
+        echo "   ✅ Kafka (KRaft mode) running (PID: $(pgrep -f 'kafka.Kafka.*server.properties'))"
     else
         echo "   ❌ Kafka not running"
     fi
@@ -126,7 +127,7 @@ function diagnose_kafka() {
     echo "💡 Recommended Actions:"
     if [ ! -d "$KAFKA_HOME" ]; then
         echo "   → Run: $0 setup"
-    elif ! pgrep -f "QuorumPeerMain.*zookeeper" > /dev/null || ! pgrep -f "kafka.Kafka.*server.properties" > /dev/null; then
+    elif ! pgrep -f "kafka.Kafka.*server.properties" > /dev/null; then
         echo "   → Run: $0 start"
     else
         echo "   → Everything looks good! Try: $0 test"
@@ -138,51 +139,20 @@ function reset_kafka() {
     
     # Stop services
     stop_kafka
-    stop_zookeeper
     
     # Clean up all data
     echo "🗑️ Cleaning up Kafka data..."
     rm -rf "$KAFKA_DATA_DIR/kafka-logs"
-    rm -rf /tmp/zookeeper
     rm -rf "$KAFKA_DATA_DIR"/*.log
     
-    # Recreate directories
+    # Recreate directories and reinitialize
     setup_kafka_dirs
     
     echo "✅ Kafka cluster reset complete"
     echo "💡 Run './scripts/kafka.sh start' to start fresh"
 }
 
-function start_zookeeper() {
-    if pgrep -f "QuorumPeerMain.*zookeeper" > /dev/null; then
-        echo "✅ Zookeeper is already running (PID: $(pgrep -f 'QuorumPeerMain.*zookeeper'))"
-        return 0
-    fi
-    
-    echo "🚀 Starting Zookeeper..."
-    cd "$KAFKA_LIBEXEC"
-    ./bin/zookeeper-server-start.sh "$ZK_CONFIG" > "$PROJECT_DIR/kafka-data/zookeeper.log" 2>&1 &
-    sleep 3
-    
-    if pgrep -f "QuorumPeerMain.*zookeeper" > /dev/null; then
-        echo "✅ Zookeeper started successfully"
-    else
-        echo "❌ Failed to start Zookeeper"
-        return 1
-    fi
-}
 
-function stop_zookeeper() {
-    if pgrep -f "QuorumPeerMain.*zookeeper" > /dev/null; then
-        echo "🛑 Stopping Zookeeper..."
-        cd "$KAFKA_LIBEXEC"
-        ./bin/zookeeper-server-stop.sh
-        sleep 2
-        echo "✅ Zookeeper stopped"
-    else
-        echo "ℹ️  Zookeeper is not running"
-    fi
-}
 
 function start_kafka() {
     if pgrep -f "kafka.Kafka.*server.properties" > /dev/null; then
@@ -190,18 +160,15 @@ function start_kafka() {
         return 0
     fi
     
-    # Ensure Zookeeper is running first
-    if ! pgrep -f "QuorumPeerMain.*zookeeper" > /dev/null; then
-        start_zookeeper
+    # Ensure KRaft metadata is initialized
+    if [ ! -f "$KAFKA_DATA_DIR/kafka-logs/meta.properties" ]; then
+        echo "🔧 Initializing KRaft cluster metadata..."
+        setup_kafka_dirs
     fi
     
-    # Clean up any stale broker registration in ZooKeeper
-    echo "🧹 Cleaning up stale broker data..."
-    rm -rf /tmp/zookeeper/version-2/log.* 2>/dev/null || true
-    rm -rf "$PROJECT_DIR/kafka-data/kafka-logs/meta.properties" 2>/dev/null || true
-    
-    echo "🚀 Starting Kafka server..."
+    echo "🚀 Starting Kafka server in KRaft mode..."
     cd "$KAFKA_LIBEXEC"
+    export JAVA_HOME="${JAVA_HOME:-$HOMEBREW_PREFIX/opt/openjdk@17}"
     ./bin/kafka-server-start.sh "$KAFKA_CONFIG" > "$PROJECT_DIR/kafka-data/kafka.log" 2>&1 &
     
     # Wait longer for Kafka to fully start
@@ -253,13 +220,7 @@ function stop_kafka() {
 }
 
 function status_kafka() {
-    echo "📊 Kafka Ecosystem Status:"
-    
-    if pgrep -f "QuorumPeerMain.*zookeeper" > /dev/null; then
-        echo "✅ Zookeeper: Running (PID: $(pgrep -f 'QuorumPeerMain.*zookeeper'))"
-    else
-        echo "❌ Zookeeper: Not running"
-    fi
+    echo "📊 Kafka Status (KRaft Mode):"
     
     if pgrep -f "kafka.Kafka.*server.properties" > /dev/null; then
         echo "✅ Kafka: Running (PID: $(pgrep -f 'kafka.Kafka.*server.properties'))"
@@ -269,6 +230,20 @@ function status_kafka() {
             echo "✅ Kafka broker: Accessible on localhost:9092"
         else
             echo "⚠️  Kafka broker: Not responding"
+        fi
+        
+        # Show KRaft metadata status
+        if [ -f "$KAFKA_DATA_DIR/kafka-logs/meta.properties" ]; then
+            echo "✅ KRaft metadata: Initialized"
+            # Show cluster ID
+            if command -v grep &> /dev/null; then
+                CLUSTER_ID=$(grep "cluster.id" "$KAFKA_DATA_DIR/kafka-logs/meta.properties" 2>/dev/null | cut -d'=' -f2)
+                if [ -n "$CLUSTER_ID" ]; then
+                    echo "   Cluster ID: $CLUSTER_ID"
+                fi
+            fi
+        else
+            echo "⚠️  KRaft metadata: Not initialized"
         fi
     else
         echo "❌ Kafka: Not running"
@@ -332,13 +307,10 @@ function test_kafka() {
 function show_logs() {
     echo "📝 Recent Kafka logs:"
     if [[ -f "$PROJECT_DIR/kafka-data/kafka.log" ]]; then
-        echo "--- Kafka Server Log (last 20 lines) ---"
-        tail -20 "$PROJECT_DIR/kafka-data/kafka.log"
-    fi
-    
-    if [[ -f "$PROJECT_DIR/kafka-data/zookeeper.log" ]]; then
-        echo "--- Zookeeper Log (last 10 lines) ---"
-        tail -10 "$PROJECT_DIR/kafka-data/zookeeper.log"
+        echo "--- Kafka Server Log (last 30 lines) ---"
+        tail -30 "$PROJECT_DIR/kafka-data/kafka.log"
+    else
+        echo "❌ No Kafka logs found at $PROJECT_DIR/kafka-data/kafka.log"
     fi
 }
 
@@ -356,18 +328,14 @@ case "$1" in
         reset_kafka
         ;;
     start)
-        start_zookeeper
         start_kafka
         ;;
     stop)
         stop_kafka
-        stop_zookeeper
         ;;
     restart)
         stop_kafka
-        stop_zookeeper
         sleep 2
-        start_zookeeper
         start_kafka
         ;;
     status)
@@ -400,9 +368,9 @@ case "$1" in
         echo "  reset         - Reset Kafka cluster (clean all data)"
         echo ""
         echo "Service Commands:"
-        echo "  start         - Start Zookeeper and Kafka"
-        echo "  stop          - Stop Kafka and Zookeeper"
-        echo "  restart       - Restart both services"
+        echo "  start         - Start Kafka in KRaft mode"
+        echo "  stop          - Stop Kafka"
+        echo "  restart       - Restart Kafka"
         echo ""
         echo "Management Commands:"
         echo "  status        - Show service status"

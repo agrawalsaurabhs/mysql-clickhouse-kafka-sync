@@ -164,10 +164,16 @@ function start_kafka_connect() {
     echo "🚀 Starting Kafka Connect..."
     cd "$KAFKA_LIBEXEC"
     
+    # Ensure log directory exists
+    mkdir -p "$(dirname "$CONNECT_LOG")"
+    
     # Set CLASSPATH to include Debezium connector
     export CLASSPATH="$PROJECT_DIR/debezium/debezium-connector-mysql/*:$CLASSPATH"
     
-    ./bin/connect-distributed.sh "$CONNECT_CONFIG" > "$CONNECT_LOG" 2>&1 &
+    # Create initial log entry
+    echo "[$(date)] Starting Kafka Connect with Debezium..." > "$CONNECT_LOG"
+    
+    ./bin/connect-distributed.sh "$CONNECT_CONFIG" >> "$CONNECT_LOG" 2>&1 &
     
     echo "⏳ Waiting for Kafka Connect to start..."
     sleep 10
@@ -234,41 +240,74 @@ function status_kafka_connect() {
 }
 
 function create_mysql_connector() {
+    echo "🏗️  Creating MySQL inventory connector..."
+    
+    # Check if Kafka Connect is running
     if ! curl -s http://localhost:8083/ > /dev/null 2>&1; then
         echo "❌ Kafka Connect is not running or not responding"
+        echo "💡 Start it with: ./scripts/debezium.sh start"
         return 1
     fi
-    
-    echo "🏗️  Creating MySQL inventory connector..."
     
     # Generate connector configuration with current environment variables
     echo "📝 Generating connector configuration..."
     "$SCRIPT_DIR/generate-connector-config.sh"
+    echo "✅ Generated MySQL connector configuration with environment variables"
     
     # Check if connector already exists
     if curl -s http://localhost:8083/connectors/mysql-inventory-connector > /dev/null 2>&1; then
-        echo "✅ Connector already exists. Checking status..."
+        echo "⚠️  Connector already exists. Checking status..."
         show_connector_status
-        return 0
+        
+        # If connector is in failed state, delete and recreate
+        local status=$(curl -s http://localhost:8083/connectors/mysql-inventory-connector/status)
+        if echo "$status" | grep -q '"state":"FAILED"'; then
+            echo "🔄 Connector is in FAILED state, recreating..."
+            delete_mysql_connector
+            sleep 2
+        else
+            return 0
+        fi
     fi
     
-    # Create the connector
-    local response=$(curl -s -w "%{http_code}" -X POST \
-        -H "Content-Type: application/json" \
-        -d @"$CONNECTOR_CONFIG" \
-        http://localhost:8083/connectors)
+    echo "🚀 Creating MySQL connector..."
     
-    local http_code="${response: -3}"
-    local response_body="${response%???}"
+    # Attempt to create connector with retry logic
+    for attempt in {1..3}; do
+        echo "   Attempt $attempt/3..."
+        
+        local response=$(curl -s -w "%{http_code}" -X POST \
+            -H "Content-Type: application/json" \
+            -d @"$CONNECTOR_CONFIG" \
+            http://localhost:8083/connectors 2>/dev/null)
+        
+        local http_code="${response: -3}"
+        local response_body="${response%???}"
+        
+        if [[ "$http_code" == "201" ]]; then
+            echo "✅ MySQL connector created successfully"
+            sleep 3  # Allow connector to initialize
+            show_connector_status
+            return 0
+        elif [[ "$http_code" == "409" ]]; then
+            echo "⚠️  Connector already exists (HTTP $http_code)"
+            show_connector_status
+            return 0
+        else
+            echo "❌ Failed to create connector (HTTP $http_code)"
+            if [ -n "$response_body" ]; then
+                echo "$response_body" | jq . 2>/dev/null || echo "$response_body"
+            fi
+            
+            if [ $attempt -lt 3 ]; then
+                echo "⏳ Waiting 5 seconds before retry..."
+                sleep 5
+            fi
+        fi
+    done
     
-    if [[ "$http_code" == "201" ]]; then
-        echo "✅ MySQL connector created successfully"
-        show_connector_status
-    else
-        echo "❌ Failed to create connector (HTTP $http_code)"
-        echo "$response_body" | jq . 2>/dev/null || echo "$response_body"
-        return 1
-    fi
+    echo "❌ Failed to create connector after 3 attempts"
+    return 1
 }
 
 function delete_mysql_connector() {

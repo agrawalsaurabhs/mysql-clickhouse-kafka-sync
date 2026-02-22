@@ -2,7 +2,7 @@
     "clickhouse": {
         "host": "127.0.0.1",
         "port": 9000,
-        "database": "default",
+        "database": "mysql_sync",
         "username": "default",
         "password": "",
         "secure": false,
@@ -48,23 +48,6 @@
             "parser": "json",
             "autoSchema": false,
             "tableName": "products",
-            "dims": [
-                {
-                    "name": "_raw_message",
-                    "type": "String"
-                }
-            ],
-            "bufferSize": 1000,
-            "flushInterval": 5
-        },
-        {
-            "name": "sinker-orders",
-            "topic": "mysql.inventory.orders",
-            "consumerGroup": "sinker-orders",
-            "earliest": true,
-            "parser": "json", 
-            "autoSchema": false,
-            "tableName": "orders",
             "dims": [
                 {
                     "name": "_raw_message",

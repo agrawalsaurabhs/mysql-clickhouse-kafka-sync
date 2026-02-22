@@ -255,7 +255,7 @@ Configuration in [`sink-connector/config.hjson`](sink-connector/config.hjson):
   "clickhouse": {
     "host": "127.0.0.1",
     "port": 9000,
-    "database": "default",
+    "database": "mysql_sync",
     "maxOpenConns": 20,
     "asyncInsert": true
   },
