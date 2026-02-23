@@ -42,7 +42,7 @@ windows:
       - name: MySQL Client
         commands:
           - clear
-          - mysql -u root --password="" inventory
+          - P=$(grep -E '^MYSQL_ROOT_PASSWORD=' .env 2>/dev/null | cut -d= -f2-) && mysql -u root ${P:+-p"$P"} inventory
 
       - name: ClickHouse Client
         commands:

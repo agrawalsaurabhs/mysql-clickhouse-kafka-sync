@@ -13,7 +13,11 @@ if [ -f "$ROOT_DIR/.env" ]; then
     val=$(grep -E '^MYSQL_ROOT_PASSWORD=' "$ROOT_DIR/.env" | cut -d= -f2-)
     MYSQL_ROOT_PASSWORD="$val"
 fi
-MYSQL_CMD="mysql -u root --password=\"${MYSQL_ROOT_PASSWORD}\""
+if [ -z "$MYSQL_ROOT_PASSWORD" ]; then
+    MYSQL_CMD="mysql -u root"
+else
+    MYSQL_CMD="mysql -u root -p${MYSQL_ROOT_PASSWORD}"
+fi
 
 echo "=== MySQL Cleanup ==="
 
