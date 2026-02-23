@@ -42,7 +42,7 @@ windows:
       - name: MySQL Client
         commands:
           - clear
-          - mysql -u root -ppassword inventory
+          - mysql -u root --password="" inventory
 
       - name: ClickHouse Client
         commands:

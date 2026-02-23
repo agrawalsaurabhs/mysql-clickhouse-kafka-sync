@@ -10,13 +10,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BREW_CNF="$(brew --prefix)/etc/my.cnf"
 
-# Load root password from .env if present, default to 'password'
-MYSQL_ROOT_PASSWORD="password"
+# Load root password from .env if present, default to blank
+MYSQL_ROOT_PASSWORD=""
 if [ -f "$ROOT_DIR/.env" ]; then
     val=$(grep -E '^MYSQL_ROOT_PASSWORD=' "$ROOT_DIR/.env" | cut -d= -f2-)
-    [ -n "$val" ] && MYSQL_ROOT_PASSWORD="$val"
+    MYSQL_ROOT_PASSWORD="$val"
 fi
-MYSQL_CMD="mysql -u root -p${MYSQL_ROOT_PASSWORD}"
+MYSQL_CMD="mysql -u root --password=\"${MYSQL_ROOT_PASSWORD}\""
 
 echo "=== MySQL Setup ==="
 
