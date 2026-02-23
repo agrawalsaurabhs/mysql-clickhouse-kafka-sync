@@ -2,7 +2,7 @@
     "clickhouse": {
         "host": "127.0.0.1",
         "port": 9000,
-        "database": "mysql_sync",
+        "database": "cdc_sync",
         "username": "default",
         "password": "",
         "secure": false,
@@ -25,7 +25,7 @@
     "tasks": [
         {
             "name": "sinker-customers",
-            "topic": "mysql.inventory.customers",
+            "topic": "customers",
             "consumerGroup": "sinker-customers-v2",
             "earliest": true,
             "parser": "json",
@@ -42,7 +42,7 @@
         },
         {
             "name": "sinker-products",
-            "topic": "mysql.inventory.products",
+            "topic": "products",
             "consumerGroup": "sinker-products", 
             "earliest": true,
             "parser": "json",

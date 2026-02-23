@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -250,81 +249,72 @@ func (h *ConsumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession,
 
 func (h *ConsumerGroupHandler) transformMessage(msg DebeziumMessage, rawMessage string) map[string]interface{} {
 	data := make(map[string]interface{})
-	
-	// First try to parse the flattened format from our connector transform
-	var flattenedMsg map[string]interface{}
-	if err := json.Unmarshal([]byte(rawMessage), &flattenedMsg); err == nil {
-		if payload, ok := flattenedMsg["payload"].(map[string]interface{}); ok {
-			// Extract ID
-			if id, exists := payload["id"]; exists {
-				data["id"] = id
-			}
-			
-			// Create clean data object without metadata fields
-			cleanPayload := make(map[string]interface{})
-			for k, v := range payload {
-				if !strings.HasPrefix(k, "__") {
-					cleanPayload[k] = v
-				}
-			}
-			
-			// Convert clean payload to JSON string
-			if dataBytes, err := json.Marshal(cleanPayload); err == nil {
-				data["data"] = string(dataBytes)
-			}
-			
-			// Extract metadata from flattened message
-			if op, exists := payload["__op"]; exists {
-				data["op"] = op
-			}
-			if tsMs, exists := payload["__source_ts_ms"]; exists {
-				data["source_ts_ms"] = tsMs
-			}
-			if sourceDb, exists := payload["__source_db"]; exists {
-				data["source_db"] = sourceDb
-			}
-			if sourceTable, exists := payload["__source_table"]; exists {
-				data["source_table"] = sourceTable
+
+	// Pick the row: use 'after' for insert/update/snapshot, 'before' for delete
+	var row map[string]interface{}
+	if msg.After != nil {
+		if m, ok := msg.After.(map[string]interface{}); ok {
+			row = m
+		}
+	}
+	if row == nil && msg.Before != nil {
+		if m, ok := msg.Before.(map[string]interface{}); ok {
+			row = m
+		}
+	}
+
+	// id
+	if row != nil {
+		if id, ok := row["id"]; ok {
+			switch v := id.(type) {
+			case float64:
+				data["id"] = uint32(v)
+			default:
+				data["id"] = uint32(0)
 			}
 		}
 	} else {
-		// Fallback to original Debezium format
-		var id interface{}
-		if msg.After != nil {
-			if afterMap, ok := msg.After.(map[string]interface{}); ok {
-				id = afterMap["id"]
-			}
-		} else if msg.Before != nil {
-			if beforeMap, ok := msg.Before.(map[string]interface{}); ok {
-				id = beforeMap["id"]
-			}
-		}
-		
-		// Convert data payload to JSON string
-		var dataJson string
-		if msg.After != nil {
-			if dataBytes, err := json.Marshal(msg.After); err == nil {
-				dataJson = string(dataBytes)
-			}
-		} else if msg.Before != nil {
-			if dataBytes, err := json.Marshal(msg.Before); err == nil {
-				dataJson = string(dataBytes)
-			}
-		}
-
-		data["id"] = id
-		data["data"] = dataJson
-		data["op"] = msg.Op
-		data["source_ts_ms"] = msg.TsMs
-		
-		if source := msg.Source; source != nil {
-			data["source_db"] = source["db"]
-			data["source_table"] = source["table"]
-		}
+		data["id"] = uint32(0)
 	}
-	
+
+	// data — full row as JSON string
+	if row != nil {
+		if b, err := json.Marshal(row); err == nil {
+			data["data"] = string(b)
+		}
+	} else {
+		data["data"] = ""
+	}
+
+	// op
+	data["op"] = msg.Op
+
+	// source_ts_ms
+	if msg.TsMs > 0 {
+		data["source_ts_ms"] = uint64(msg.TsMs)
+	} else {
+		data["source_ts_ms"] = uint64(0)
+	}
+
+	// source_db / source_table
+	if msg.Source != nil {
+		if db, ok := msg.Source["db"].(string); ok {
+			data["source_db"] = db
+		} else {
+			data["source_db"] = ""
+		}
+		if tbl, ok := msg.Source["table"].(string); ok {
+			data["source_table"] = tbl
+		} else {
+			data["source_table"] = ""
+		}
+	} else {
+		data["source_db"] = ""
+		data["source_table"] = ""
+	}
+
 	data["_raw_message"] = rawMessage
-	
+
 	return data
 }
 

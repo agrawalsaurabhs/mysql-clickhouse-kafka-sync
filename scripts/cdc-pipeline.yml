@@ -1,0 +1,42 @@
+# CDC Pipeline — iTerm2 Layout
+# Usage: itermocil --layout scripts/cdc-pipeline.yml
+
+windows:
+  - name: cdc-pipeline
+    root: ~/Desktop/samples/rds-ch-sync
+    layout: tiled
+    panes:
+      - name: ClickHouse Logs
+        commands:
+          - clear
+          - until [ -f clickhouse-setup/server.log ]; do sleep 1; done; tail -f clickhouse-setup/server.log
+
+      - name: Kafka Logs
+        commands:
+          - clear
+          - until [ -f kafka-setup/kafka.log ]; do sleep 1; done; tail -f kafka-setup/kafka.log
+
+      - name: MySQL Error Log
+        commands:
+          - clear
+          - tail -f $(brew --prefix)/var/mysql/*.err
+
+      - name: Debezium Logs
+        commands:
+          - clear
+          - until [ -f debezium-setup/debezium.log ]; do sleep 1; done; tail -f debezium-setup/debezium.log
+
+      - name: Sinker Logs
+        commands:
+          - clear
+          - until [ -f sinker-setup/sink.log ]; do sleep 1; done; tail -f sinker-setup/sink.log
+
+      - name: MySQL Client
+        commands:
+          - clear
+          - mysql -u root -ppassword inventory
+
+      - name: ClickHouse Client
+        commands:
+          - clear
+          - ./clickhouse-setup/clickhouse client --database cdc_sync
