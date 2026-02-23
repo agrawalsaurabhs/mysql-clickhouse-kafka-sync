@@ -69,34 +69,37 @@ echo "Initialising database..."
 CREATE DATABASE IF NOT EXISTS cdc_sync;
 
 -- Schema matches sinker-setup's createTables() / insertBatch() exactly.
--- `data` holds the full row as a JSON string; `_raw_message` is the raw Kafka payload.
+-- ReplacingMergeTree(source_ts_ms): on merge/FINAL keeps the row with the highest
+-- source_ts_ms per id. is_deleted=1 marks deletes; query with FINAL WHERE is_deleted=0.
 CREATE TABLE IF NOT EXISTS cdc_sync.customers
 (
     id              UInt32,
     data            String,
     op              String,
+    is_deleted      UInt8    DEFAULT 0,
     source_ts_ms    UInt64,
     source_db       String,
     source_table    String,
     _raw_message    String,
     _ingestion_time DateTime DEFAULT now()
 )
-ENGINE = MergeTree()
-ORDER BY (id, _ingestion_time);
+ENGINE = ReplacingMergeTree(source_ts_ms)
+ORDER BY id;
 
 CREATE TABLE IF NOT EXISTS cdc_sync.products
 (
     id              UInt32,
     data            String,
     op              String,
+    is_deleted      UInt8    DEFAULT 0,
     source_ts_ms    UInt64,
     source_db       String,
     source_table    String,
     _raw_message    String,
     _ingestion_time DateTime DEFAULT now()
 )
-ENGINE = MergeTree()
-ORDER BY (id, _ingestion_time);
+ENGINE = ReplacingMergeTree(source_ts_ms)
+ORDER BY id;
 SQL
 
 echo "Database 'cdc_sync' initialised."

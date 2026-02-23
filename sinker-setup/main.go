@@ -169,16 +169,17 @@ func (sc *SinkConnector) createTables() error {
 	for _, task := range sc.config.Tasks {
 		query := fmt.Sprintf(`
 			CREATE TABLE IF NOT EXISTS %s (
-				id UInt32,
-				data String,
-				op String,
-				source_ts_ms UInt64,
-				source_db String,
-				source_table String,
-				_raw_message String,
+				id              UInt32,
+				data            String,
+				op              String,
+				is_deleted      UInt8    DEFAULT 0,
+				source_ts_ms    UInt64,
+				source_db       String,
+				source_table    String,
+				_raw_message    String,
 				_ingestion_time DateTime DEFAULT now()
-			) ENGINE = MergeTree()
-			ORDER BY (id, _ingestion_time)
+			) ENGINE = ReplacingMergeTree(source_ts_ms)
+			ORDER BY id
 		`, task.TableName)
 
 		if err := sc.clickhouse.Exec(context.Background(), query); err != nil {
@@ -289,6 +290,13 @@ func (h *ConsumerGroupHandler) transformMessage(msg DebeziumMessage, rawMessage 
 	// op
 	data["op"] = msg.Op
 
+	// is_deleted: mark deletes so ReplacingMergeTree can tombstone them
+	if msg.Op == "d" {
+		data["is_deleted"] = uint8(1)
+	} else {
+		data["is_deleted"] = uint8(0)
+	}
+
 	// source_ts_ms
 	if msg.TsMs > 0 {
 		data["source_ts_ms"] = uint64(msg.TsMs)
@@ -378,20 +386,21 @@ func (sc *SinkConnector) insertBatch(tableName string, data []map[string]interfa
 	}
 	
 	query := fmt.Sprintf(`
-		INSERT INTO %s (id, data, op, source_ts_ms, source_db, source_table, _raw_message)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, tableName)
-	
+                INSERT INTO %s (id, data, op, is_deleted, source_ts_ms, source_db, source_table, _raw_message)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `, tableName)
+
 	batch, err := sc.clickhouse.PrepareBatch(context.Background(), query)
 	if err != nil {
 		return err
 	}
-	
+
 	for _, row := range data {
 		err := batch.Append(
 			row["id"],
 			row["data"],
 			row["op"],
+			row["is_deleted"],
 			row["source_ts_ms"],
 			row["source_db"],
 			row["source_table"],
