@@ -26,7 +26,7 @@ MySQL 8.0       Debezium            Kafka         Go Sinker       ClickHouse
 | Homebrew | https://brew.sh |
 | Java 17 | `brew install openjdk@17` |
 | Go 1.21+ | https://go.dev/dl |
-| iTerm2 + itermocil | `brew install itermocil` |
+| iTerm2 + itermocil | `gem install itermocil` |
 
 MySQL, Kafka, ClickHouse and Debezium are downloaded automatically by the install scripts.
 

@@ -63,7 +63,7 @@ echo ""
 # ── Open iTerm2 monitoring layout ──────────────────────────────────────────────
 if ! command -v itermocil >/dev/null 2>&1; then
     step "Installing itermocil"
-    brew install itermocil || fail "Failed to install itermocil"
+    gem install itermocil || fail "Failed to install itermocil — try: sudo gem install itermocil"
     ok "itermocil installed"
 fi
 
