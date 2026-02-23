@@ -61,15 +61,16 @@ echo "════════════════════════�
 echo ""
 
 # ── Open iTerm2 monitoring layout ──────────────────────────────────────────────
-if command -v itermocil >/dev/null 2>&1; then
-    step "Opening iTerm2 monitoring layout"
-    itermocil --layout "$ROOT/scripts/cdc-pipeline.yml" || \
-        echo "⚠  itermocil failed — run manually: itermocil --layout scripts/cdc-pipeline.yml"
-    ok "iTerm2 layout launched"
-else
-    echo "⚠  itermocil not installed — run: brew install itermocil"
-    echo "   Then open layout manually: itermocil --layout scripts/cdc-pipeline.yml"
+if ! command -v itermocil >/dev/null 2>&1; then
+    step "Installing itermocil"
+    brew install itermocil || fail "Failed to install itermocil"
+    ok "itermocil installed"
 fi
+
+step "Opening iTerm2 monitoring layout"
+itermocil --layout "$ROOT/scripts/cdc-pipeline.yml" || \
+    echo "⚠  itermocil failed — run manually: itermocil --layout scripts/cdc-pipeline.yml"
+ok "iTerm2 layout launched"
 echo ""
 echo "  MySQL     : localhost:3306  (db: inventory)"
 echo "  Kafka     : localhost:9092"
