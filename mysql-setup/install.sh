@@ -25,15 +25,23 @@ fi
 echo "=== MySQL Setup ==="
 
 # -----------------------------------------
-# 1. Install MySQL 8.0 via Homebrew
+# 1. Install MySQL 8+ via Homebrew (if not already present)
 # -----------------------------------------
-if ! brew list mysql@8.0 &>/dev/null; then
+MYSQL_VERSION=""
+if command -v mysql &>/dev/null; then
+    MYSQL_VERSION=$(mysql --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    MYSQL_MAJOR=$(echo "$MYSQL_VERSION" | cut -d. -f1)
+fi
+
+if [ -n "$MYSQL_VERSION" ] && [ "$MYSQL_MAJOR" -ge 8 ]; then
+    echo "MySQL $MYSQL_VERSION already installed — skipping."
+elif brew list mysql@8.0 &>/dev/null; then
+    echo "MySQL 8.0 (Homebrew) already installed."
+else
     echo "Installing MySQL 8.0..."
     brew install mysql@8.0
     brew link mysql@8.0 --force
     echo "MySQL 8.0 installed."
-else
-    echo "MySQL 8.0 already installed."
 fi
 
 # -----------------------------------------
