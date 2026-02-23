@@ -18,6 +18,16 @@ step() { echo ""; echo "──────────────────�
 ok()   { echo "✓ $1"; }
 fail() { echo "✗ $1"; exit 1; }
 
+# ── 0. .env setup ──────────────────────────────────────────────────────────────
+step "0/5  Environment (.env)"
+if [ ! -f "$ROOT/.env" ]; then
+    cp "$ROOT/.env.example" "$ROOT/.env"
+    echo "Created .env from .env.example — review and edit if needed."
+else
+    echo ".env already exists — skipping."
+fi
+ok ".env ready"
+
 # ── 1. ClickHouse ──────────────────────────────────────────────────────────────
 step "1/5  ClickHouse"
 bash "$ROOT/clickhouse-setup/install.sh" || fail "ClickHouse setup failed"

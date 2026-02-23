@@ -31,6 +31,14 @@ windows:
           - clear
           - until [ -f sinker-setup/sink.log ]; do sleep 1; done; tail -f sinker-setup/sink.log
 
+      - name: Data Generator
+        commands:
+          - clear
+          - echo "=== Data Generator ==="
+          - echo "Press Enter to start continuous CRUD operations (every 5s)..."
+          - read
+          - ./mysql-setup/generate-data.sh
+
       - name: MySQL Client
         commands:
           - clear
