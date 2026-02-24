@@ -83,6 +83,7 @@ echo "Creating Debezium replication user..."
 $MYSQL_CMD << 'SQL'
 CREATE USER IF NOT EXISTS 'debezium'@'localhost' IDENTIFIED BY 'debezium_password';
 GRANT SELECT, RELOAD, SHOW DATABASES, REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO 'debezium'@'localhost';
+GRANT SELECT, INSERT, UPDATE, DELETE ON inventory.* TO 'debezium'@'localhost';
 FLUSH PRIVILEGES;
 SQL
 echo "Debezium user ready."

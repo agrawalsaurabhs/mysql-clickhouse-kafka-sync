@@ -3,7 +3,7 @@
 
 windows:
   - name: cdc-pipeline
-    root: ~/Desktop/samples/rds-ch-sync
+    root: /Users/ubuntu/Browserstack/mysql-clickhouse-kafka-sync
     layout: tiled
     panes:
       - name: ClickHouse Logs
