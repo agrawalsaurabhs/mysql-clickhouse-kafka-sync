@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Data Generator - Inserts records every 5 seconds
-set -e
+#set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
@@ -18,6 +18,7 @@ MYSQL_HOST="${MYSQL_HOST:-localhost}"
 MYSQL_PORT="${MYSQL_PORT:-3306}"
 MYSQL_USER="${MYSQL_USER:-debezium}"
 MYSQL_PASSWORD="${MYSQL_PASSWORD:-debezium_password}"
+MYSQL_DATABASE="${MYSQL_DATABASE:-inventory}"
 
 echo "🚀 Starting continuous data generation..."
 echo "📝 Performing random CRUD operations every 5 seconds"
@@ -35,6 +36,49 @@ counter=0
 mysql_exec() {
     mysql -h "${MYSQL_HOST}" -P "${MYSQL_PORT}" -u "${MYSQL_USER}" -p"${MYSQL_PASSWORD}" "$@"
 }
+
+mysql_exec_silent() {
+    mysql_exec "$@" 2>/dev/null
+}
+
+check_write_access() {
+    local probe_email
+    probe_email="access_check_$(date +%s)_$RANDOM@example.com"
+
+    mysql_exec_silent -e "
+    USE ${MYSQL_DATABASE};
+    START TRANSACTION;
+    INSERT INTO customers (first_name, last_name, email)
+    VALUES ('Access', 'Check', '${probe_email}');
+    DELETE FROM customers WHERE email = '${probe_email}';
+    ROLLBACK;
+    "
+}
+
+execute_sql() {
+    local sql="$1"
+    local output
+    if ! output=$(mysql_exec -e "$sql" 2>&1); then
+        echo "❌ MySQL command failed: $output"
+        return 1
+    fi
+    echo "$output"
+}
+
+# Verify connectivity and write access before starting loop
+if ! mysql_exec_silent -e "SELECT 1;"; then
+    echo "❌ Could not connect to MySQL using ${MYSQL_USER}@${MYSQL_HOST}:${MYSQL_PORT}"
+    echo "   Check MYSQL_HOST, MYSQL_PORT, MYSQL_USER and MYSQL_PASSWORD in .env"
+    exit 1
+fi
+
+if ! check_write_access; then
+    echo "❌ User '${MYSQL_USER}' does not have write permissions on ${MYSQL_DATABASE}.*"
+    echo "   Run: ./mysql-setup/install.sh"
+    echo "   Or grant manually:"
+    echo "   GRANT SELECT, INSERT, UPDATE, DELETE ON ${MYSQL_DATABASE}.* TO '${MYSQL_USER}'@'localhost';"
+    exit 1
+fi
 
 # Arrays for generating random data
 first_names=("Alice" "Bob" "Charlie" "David" "Eve" "Frank" "Grace" "Henry" "Ivy" "Jack" "Kate" "Liam" "Mia" "Noah" "Olivia" "Peter" "Quinn" "Ruby" "Sam" "Tina")
@@ -61,47 +105,56 @@ while true; do
     
     if [ $operation_type -lt 4 ]; then
         # CREATE (INSERT) - 40% probability
-        mysql_exec -e "
-        USE inventory;
+        if execute_sql "
+        USE ${MYSQL_DATABASE};
         INSERT INTO customers (first_name, last_name, email) 
         VALUES ('$first_name', '$last_name', '$email');
-        " 2>/dev/null
-        
-        mysql_exec -e "
-        USE inventory;
+        " >/dev/null && execute_sql "
+        USE ${MYSQL_DATABASE};
         INSERT INTO products (name, description, weight) 
         VALUES ('$product_name', 'Auto-generated product #$counter', $weight);
-        " 2>/dev/null
-        
-        echo "[$timestamp] #$counter - CREATE: Added $first_name $last_name, $product_name (${weight}kg)"
+        " >/dev/null; then
+            echo "[$timestamp] #$counter - CREATE: Added $first_name $last_name, $product_name (${weight}kg)"
+        else
+            echo "[$timestamp] #$counter - CREATE: Failed"
+        fi
         
     elif [ $operation_type -lt 7 ]; then
         # UPDATE - 30% probability
         update_type=$((RANDOM % 3))
         if [ $update_type -eq 0 ]; then
             # Update customer
-            mysql_exec -e "
-            USE inventory;
+            if execute_sql "
+            USE ${MYSQL_DATABASE};
             UPDATE customers SET email = CONCAT('updated_', email) 
             WHERE id = (SELECT id FROM (SELECT id FROM customers ORDER BY RAND() LIMIT 1) as tmp);
-            " 2>/dev/null
-            echo "[$timestamp] #$counter - UPDATE: Updated customer email"
+            " >/dev/null; then
+                echo "[$timestamp] #$counter - UPDATE: Updated customer email"
+            else
+                echo "[$timestamp] #$counter - UPDATE: Failed to update customer email"
+            fi
         elif [ $update_type -eq 1 ]; then
             # Update product
-            mysql_exec -e "
-            USE inventory;
+            if execute_sql "
+            USE ${MYSQL_DATABASE};
             UPDATE products SET weight = ROUND(RAND() * 10, 2)
             WHERE id = (SELECT id FROM (SELECT id FROM products ORDER BY RAND() LIMIT 1) as tmp);
-            " 2>/dev/null
-            echo "[$timestamp] #$counter - UPDATE: Updated product weight"
+            " >/dev/null; then
+                echo "[$timestamp] #$counter - UPDATE: Updated product weight"
+            else
+                echo "[$timestamp] #$counter - UPDATE: Failed to update product weight"
+            fi
         else
             # Update customer name
-            mysql_exec -e "
-            USE inventory;
+            if execute_sql "
+            USE ${MYSQL_DATABASE};
             UPDATE customers SET first_name = CONCAT(first_name, '-MOD') 
             WHERE id = (SELECT id FROM (SELECT id FROM customers ORDER BY RAND() LIMIT 1) as tmp);
-            " 2>/dev/null
-            echo "[$timestamp] #$counter - UPDATE: Updated customer name"
+            " >/dev/null; then
+                echo "[$timestamp] #$counter - UPDATE: Updated customer name"
+            else
+                echo "[$timestamp] #$counter - UPDATE: Failed to update customer name"
+            fi
         fi
         
     elif [ $operation_type -lt 9 ]; then
@@ -109,15 +162,15 @@ while true; do
         delete_type=$((RANDOM % 2))
         if [ $delete_type -eq 0 ]; then
             # Delete customer (but keep some records)
-            deleted_count=$(mysql_exec -e "
-            USE inventory;
+            deleted_count=$(execute_sql "
+            USE ${MYSQL_DATABASE};
             DELETE FROM customers WHERE id = (
                 SELECT id FROM (
                     SELECT id FROM customers WHERE id > 100 ORDER BY RAND() LIMIT 1
                 ) as tmp
             );
             SELECT ROW_COUNT() as deleted;
-            " 2>/dev/null | tail -1)
+            " | tail -1)
             if [ "$deleted_count" = "1" ]; then
                 echo "[$timestamp] #$counter - DELETE: Removed customer"
             else
@@ -125,15 +178,15 @@ while true; do
             fi
         else
             # Delete product
-            deleted_count=$(mysql_exec -e "
-            USE inventory;
+            deleted_count=$(execute_sql "
+            USE ${MYSQL_DATABASE};
             DELETE FROM products WHERE id = (
                 SELECT id FROM (
                     SELECT id FROM products WHERE id > 100 ORDER BY RAND() LIMIT 1
                 ) as tmp
             );
             SELECT ROW_COUNT() as deleted;
-            " 2>/dev/null | tail -1)
+            " | tail -1)
             if [ "$deleted_count" = "1" ]; then
                 echo "[$timestamp] #$counter - DELETE: Removed product"
             else
@@ -145,22 +198,22 @@ while true; do
         # READ queries - 10% probability
         read_type=$((RANDOM % 3))
         if [ $read_type -eq 0 ]; then
-            customer_count=$(mysql_exec -e "
-            USE inventory;
+            customer_count=$(execute_sql "
+            USE ${MYSQL_DATABASE};
             SELECT COUNT(*) as count FROM customers;
-            " 2>/dev/null | tail -1)
+            " | tail -1)
             echo "[$timestamp] #$counter - READ: Total customers: $customer_count"
         elif [ $read_type -eq 1 ]; then
-            product_count=$(mysql_exec -e "
-            USE inventory;
+            product_count=$(execute_sql "
+            USE ${MYSQL_DATABASE};
             SELECT COUNT(*) as count FROM products;
-            " 2>/dev/null | tail -1)
+            " | tail -1)
             echo "[$timestamp] #$counter - READ: Total products: $product_count"
         else
-            latest_customer=$(mysql_exec -e "
-            USE inventory;
+            latest_customer=$(execute_sql "
+            USE ${MYSQL_DATABASE};
             SELECT CONCAT(first_name, ' ', last_name) as name FROM customers ORDER BY id DESC LIMIT 1;
-            " 2>/dev/null | tail -1)
+            " | tail -1)
             echo "[$timestamp] #$counter - READ: Latest customer: $latest_customer"
         fi
     fi

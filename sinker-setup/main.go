@@ -7,6 +7,8 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -174,6 +176,11 @@ func (sc *SinkConnector) createTables() error {
 				op              String,
 				is_deleted      UInt8    DEFAULT 0,
 				source_ts_ms    UInt64,
+				source_file     String,
+				source_file_idx UInt64,
+				source_pos      UInt64,
+				source_row      UInt64,
+				source_gtid     String,
 				source_db       String,
 				source_table    String,
 				_raw_message    String,
@@ -185,9 +192,120 @@ func (sc *SinkConnector) createTables() error {
 		if err := sc.clickhouse.Exec(context.Background(), query); err != nil {
 			return fmt.Errorf("failed to create table %s: %v", task.TableName, err)
 		}
+
+		alterStatements := []string{
+			fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS source_file String AFTER source_ts_ms", task.TableName),
+			fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS source_file_idx UInt64 AFTER source_file", task.TableName),
+			fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS source_pos UInt64 AFTER source_file_idx", task.TableName),
+			fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS source_row UInt64 AFTER source_pos", task.TableName),
+			fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS source_gtid String AFTER source_row", task.TableName),
+		}
+		for _, alterStmt := range alterStatements {
+			if err := sc.clickhouse.Exec(context.Background(), alterStmt); err != nil {
+				return fmt.Errorf("failed to migrate table %s: %v", task.TableName, err)
+			}
+		}
+
+		latestByTSFilePosView := fmt.Sprintf(`
+			CREATE OR REPLACE VIEW %s_latest_by_ts_file_pos AS
+			SELECT
+				id,
+				argMax(data, tuple(source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time)) AS data,
+				argMax(op, tuple(source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time)) AS op,
+				argMax(is_deleted, tuple(source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time)) AS is_deleted,
+				argMax(source_ts_ms, tuple(source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time)) AS source_ts_ms,
+				argMax(source_file, tuple(source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time)) AS source_file,
+				argMax(source_file_idx, tuple(source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time)) AS source_file_idx,
+				argMax(source_pos, tuple(source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time)) AS source_pos,
+				argMax(source_row, tuple(source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time)) AS source_row,
+				argMax(source_gtid, tuple(source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time)) AS source_gtid,
+				argMax(source_db, tuple(source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time)) AS source_db,
+				argMax(source_table, tuple(source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time)) AS source_table,
+				argMax(_raw_message, tuple(source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time)) AS _raw_message,
+				max(_ingestion_time) AS _ingestion_time
+			FROM %s
+			GROUP BY id
+		`, task.TableName, task.TableName)
+
+		if err := sc.clickhouse.Exec(context.Background(), latestByTSFilePosView); err != nil {
+			return fmt.Errorf("failed to create view %s_latest_by_ts_file_pos: %v", task.TableName, err)
+		}
+
+		latestByGTIDView := fmt.Sprintf(`
+			CREATE OR REPLACE VIEW %s_latest_by_gtid AS
+			SELECT
+				id,
+				argMax(data, tuple(source_gtid != '', source_gtid, source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time)) AS data,
+				argMax(op, tuple(source_gtid != '', source_gtid, source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time)) AS op,
+				argMax(is_deleted, tuple(source_gtid != '', source_gtid, source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time)) AS is_deleted,
+				argMax(source_ts_ms, tuple(source_gtid != '', source_gtid, source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time)) AS source_ts_ms,
+				argMax(source_file, tuple(source_gtid != '', source_gtid, source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time)) AS source_file,
+				argMax(source_file_idx, tuple(source_gtid != '', source_gtid, source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time)) AS source_file_idx,
+				argMax(source_pos, tuple(source_gtid != '', source_gtid, source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time)) AS source_pos,
+				argMax(source_row, tuple(source_gtid != '', source_gtid, source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time)) AS source_row,
+				argMax(source_gtid, tuple(source_gtid != '', source_gtid, source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time)) AS source_gtid,
+				argMax(source_db, tuple(source_gtid != '', source_gtid, source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time)) AS source_db,
+				argMax(source_table, tuple(source_gtid != '', source_gtid, source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time)) AS source_table,
+				argMax(_raw_message, tuple(source_gtid != '', source_gtid, source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time)) AS _raw_message,
+				max(_ingestion_time) AS _ingestion_time
+			FROM %s
+			GROUP BY id
+		`, task.TableName, task.TableName)
+
+		if err := sc.clickhouse.Exec(context.Background(), latestByGTIDView); err != nil {
+			return fmt.Errorf("failed to create view %s_latest_by_gtid: %v", task.TableName, err)
+		}
 		log.Printf("Created/verified table: %s", task.TableName)
 	}
 	return nil
+}
+
+func toUint64(value interface{}) uint64 {
+	switch v := value.(type) {
+	case float64:
+		if v < 0 {
+			return 0
+		}
+		return uint64(v)
+	case int:
+		if v < 0 {
+			return 0
+		}
+		return uint64(v)
+	case int64:
+		if v < 0 {
+			return 0
+		}
+		return uint64(v)
+	case uint64:
+		return v
+	case string:
+		parsed, err := strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			return 0
+		}
+		return parsed
+	default:
+		return 0
+	}
+}
+
+func parseBinlogFileIndex(file string) uint64 {
+	if file == "" {
+		return 0
+	}
+
+	parts := strings.Split(file, ".")
+	if len(parts) == 0 {
+		return 0
+	}
+
+	idx, err := strconv.ParseUint(parts[len(parts)-1], 10, 64)
+	if err != nil {
+		return 0
+	}
+
+	return idx
 }
 
 func (sc *SinkConnector) startConsumer(task Task) error {
@@ -306,6 +424,23 @@ func (h *ConsumerGroupHandler) transformMessage(msg DebeziumMessage, rawMessage 
 
 	// source_db / source_table
 	if msg.Source != nil {
+		if file, ok := msg.Source["file"].(string); ok {
+			data["source_file"] = file
+			data["source_file_idx"] = parseBinlogFileIndex(file)
+		} else {
+			data["source_file"] = ""
+			data["source_file_idx"] = uint64(0)
+		}
+
+		if gtid, ok := msg.Source["gtid"].(string); ok {
+			data["source_gtid"] = gtid
+		} else {
+			data["source_gtid"] = ""
+		}
+
+		data["source_pos"] = toUint64(msg.Source["pos"])
+		data["source_row"] = toUint64(msg.Source["row"])
+
 		if db, ok := msg.Source["db"].(string); ok {
 			data["source_db"] = db
 		} else {
@@ -317,6 +452,11 @@ func (h *ConsumerGroupHandler) transformMessage(msg DebeziumMessage, rawMessage 
 			data["source_table"] = ""
 		}
 	} else {
+		data["source_file"] = ""
+		data["source_file_idx"] = uint64(0)
+		data["source_pos"] = uint64(0)
+		data["source_row"] = uint64(0)
+		data["source_gtid"] = ""
 		data["source_db"] = ""
 		data["source_table"] = ""
 	}
@@ -386,8 +526,8 @@ func (sc *SinkConnector) insertBatch(tableName string, data []map[string]interfa
 	}
 	
 	query := fmt.Sprintf(`
-                INSERT INTO %s (id, data, op, is_deleted, source_ts_ms, source_db, source_table, _raw_message)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		        INSERT INTO %s (id, data, op, is_deleted, source_ts_ms, source_file, source_file_idx, source_pos, source_row, source_gtid, source_db, source_table, _raw_message)
+		        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, tableName)
 
 	batch, err := sc.clickhouse.PrepareBatch(context.Background(), query)
@@ -402,6 +542,11 @@ func (sc *SinkConnector) insertBatch(tableName string, data []map[string]interfa
 			row["op"],
 			row["is_deleted"],
 			row["source_ts_ms"],
+			row["source_file"],
+			row["source_file_idx"],
+			row["source_pos"],
+			row["source_row"],
+			row["source_gtid"],
 			row["source_db"],
 			row["source_table"],
 			row["_raw_message"],
