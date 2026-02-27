@@ -11,6 +11,7 @@
     "database.server.id": "184054",
     "topic.prefix": "mysql",
     "database.allowPublicKeyRetrieval": "true",
+    "gtid.source.includes": ".*",
 
     "database.include.list": "inventory",
     "table.include.list": "inventory.customers,inventory.products",

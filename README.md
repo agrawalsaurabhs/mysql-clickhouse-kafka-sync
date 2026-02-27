@@ -122,9 +122,16 @@ Go service that consumes Kafka topics and bulk-inserts into ClickHouse. Flushes 
 | `data` | Full row as a JSON string |
 | `op` | `c` create · `u` update · `d` delete · `r` snapshot |
 | `source_ts_ms` | MySQL commit timestamp |
+| `source_file` / `source_pos` / `source_row` | Binlog location tuple from Debezium source metadata |
+| `source_gtid` | GTID from Debezium source metadata (when available) |
 | `source_db` / `source_table` | Origin database and table |
 | `_raw_message` | Full Debezium JSON for debugging |
 | `_ingestion_time` | ClickHouse insert time |
+
+POC views are also auto-created per table:
+
+- `<table>_latest_by_ts_file_pos` uses `argMax(..., tuple(source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time))`
+- `<table>_latest_by_gtid` uses `argMax(..., tuple(source_gtid != '', source_gtid, source_ts_ms, source_file_idx, source_pos, source_row, _ingestion_time))`
 
 ### ClickHouse (`clickhouse-setup/`)
 
@@ -135,12 +142,18 @@ CREATE TABLE cdc_sync.customers (
     id              UInt32,
     data            String,
     op              String,
+    is_deleted      UInt8,
     source_ts_ms    UInt64,
+    source_file     String,
+    source_file_idx UInt64,
+    source_pos      UInt64,
+    source_row      UInt64,
+    source_gtid     String,
     source_db       String,
     source_table    String,
     _raw_message    String,
     _ingestion_time DateTime DEFAULT now()
-) ENGINE = MergeTree() ORDER BY (id, _ingestion_time);
+) ENGINE = ReplacingMergeTree(source_ts_ms) ORDER BY id;
 ```
 
 ---
@@ -157,6 +170,17 @@ VALUES ('John', 'Doe', 'john@example.com');
 -- ClickHouse Client pane (within ~5 seconds):
 SELECT id, JSONExtractString(data, 'first_name'), op, _ingestion_time
 FROM customers ORDER BY _ingestion_time DESC LIMIT 5;
+
+-- POC: compare latest-row pick strategies
+SELECT id, op, source_ts_ms, source_file, source_pos, source_gtid
+FROM customers_latest_by_ts_file_pos
+ORDER BY id
+LIMIT 10;
+
+SELECT id, op, source_ts_ms, source_file, source_pos, source_gtid
+FROM customers_latest_by_gtid
+ORDER BY id
+LIMIT 10;
 ```
 
 For continuous random CRUD:
